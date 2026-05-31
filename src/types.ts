@@ -19,6 +19,15 @@ export interface Asset {
   mime: string;
   createdAt: number;
   origin: AssetOrigin;
+  /** Video duration in seconds (video assets only; absent for images). */
+  duration?: number | null;
+  /** Video frame rate (video assets only; absent for images). */
+  fps?: number | null;
+}
+
+/** True if an Asset is a video (drives the canvas video render path). */
+export function isVideoAsset(a: Asset): boolean {
+  return a.mime.startsWith("video/");
 }
 
 export interface Placement {
@@ -181,6 +190,14 @@ export type CodexEvent =
       asset: Asset;
       placement: Placement;
       caption?: string | null;
+      placeholderId?: string | null;
+    }
+  | {
+      /** A video (or other media) file Codex's ffmpeg produced — or the user
+       *  dropped in — detected by the folder watcher and placed on the canvas. */
+      kind: "mediaIngested";
+      asset: Asset;
+      placement: Placement;
       placeholderId?: string | null;
     }
   | { kind: "permissionRequest"; requestId: number; summary: string }

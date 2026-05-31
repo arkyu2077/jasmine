@@ -12,6 +12,10 @@ target/
 src-tauri/target/
 src-tauri/gen/schemas/
 
+# Bundled ffmpeg/ffprobe — fetched per build platform (see scripts/fetch-ffmpeg.sh).
+# GPL static builds, not committed; ship THIRD_PARTY_NOTICES alongside them.
+src-tauri/binaries/
+
 # Env / local secrets
 .env
 .env.*

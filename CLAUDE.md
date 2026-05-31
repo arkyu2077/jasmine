@@ -137,11 +137,24 @@
 - 看日志：设置弹窗里「打开日志文件夹」，或 `tail -f ~/.jasmine/logs/jasmine.*.log`；要更细 →
   `RUST_LOG=jasmine_lib=trace pnpm tauri dev`。
 
+### 部署 / 验证（**别拿旧包测** —— 踩过的坑）
+- **新功能要在真实 app 里验证 / 重新部署时,先清掉旧产物再重打、重启。** 否则你会对着改动**之前**编译的 `dist/` 或 `Jasmine.app` 测,看到的是旧行为,误判成「逻辑没生效 / 改动没用」。
+- 判断是不是在跑旧包:比对时间戳 —— 改的源文件 mtime 应早于产物;或在产物里 grep 你这次新增的标志串(如某个新函数名/字符串),搜不到就是旧包。
+  ```bash
+  # 重新部署 / 重打包前先清旧产物
+  rm -rf dist src-tauri/target/release/bundle
+  pnpm tauri build            # 或按平台 pnpm tauri build --bundles app
+  ```
+- **`pnpm tauri dev` 同理**:前端 HMR 有时不会干净替换(尤其 contentEditable 的事件闭包、模块级状态)。改完没生效 → **重启 dev**(Ctrl+C 再起)或窗口内 **Cmd+R 硬刷新**,别只靠热重载下结论。
+- 一句话:**验证前先确认跑的是最新构建**;拿旧包测出来的"bug"不是 bug。
+
 ### 完成前自检
 ```bash
 pnpm typecheck && pnpm lint    # 必须过
 cargo check                     # Rust 改动时
-pnpm tauri dev                  # 有 UI 改动时烟测
+# UI/构建改动要在真实 app 验证时:先清旧产物,确保不是拿旧包测(见上「部署 / 验证」)
+rm -rf dist src-tauri/target/release/bundle && pnpm tauri build   # 需要真实 app 验证时
+pnpm tauri dev                  # 或 dev 烟测(改完重启 / Cmd+R,别只靠 HMR)
 ```
 
 ---

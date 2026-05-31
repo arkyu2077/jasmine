@@ -36,6 +36,8 @@ import { ipc } from "./lib/ipc";
 import { buildOverlays } from "./lib/overlay";
 
 const IMAGE_EXTS = ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "avif"];
+const VIDEO_EXTS = ["mp4", "mov", "webm", "mkv", "m4v"];
+const MEDIA_EXTS = [...IMAGE_EXTS, ...VIDEO_EXTS];
 const CODEX_START_RETRY_DELAYS_MS = [0, 1_000, 3_000];
 
 function wait(ms: number) {
@@ -45,8 +47,8 @@ function wait(ms: number) {
 async function pickImages() {
   const sel = await open({
     multiple: true,
-    title: "Add images",
-    filters: [{ name: "Images", extensions: IMAGE_EXTS }],
+    title: "Add media",
+    filters: [{ name: "Media", extensions: MEDIA_EXTS }],
   });
   const paths = Array.isArray(sel) ? sel : sel ? [sel] : [];
   if (paths.length) void useBoardStore.getState().importFiles(paths as string[]);
@@ -343,6 +345,9 @@ export default function App() {
         if (testPrompt) {
           const st = useBoardStore.getState();
           const first = [...st.placements.keys()][0];
+          // Auto-select the referenced placement so a video upgrades to live
+          // playback + shows its control bar (test-gated; no effect in normal use).
+          if (first) st.setSelection([first]);
           const refs = first ? [first] : [];
           const p = first ? st.placements.get(first) : undefined;
           const a = p ? st.assets.get(p.assetId) : undefined;

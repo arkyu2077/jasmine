@@ -63,6 +63,13 @@ pub struct Asset {
     /// How this Asset entered the Board (additive — old docs default to `imported`).
     #[serde(default)]
     pub origin: Origin,
+    /// Video duration in seconds (video assets only; `None` for images).
+    /// Additive — old docs / images load as `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration: Option<f64>,
+    /// Video frame rate (video assets only; `None` for images).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fps: Option<f64>,
 }
 
 /// A placed instance of an Asset on the canvas. Mutating a Placement never

@@ -222,6 +222,35 @@ pub fn make_derived_placement(
     }
 }
 
+/// Place an already-minted media Asset into `doc` with optional lineage,
+/// returning the new Placement. Minting (ffprobe / streaming hash — potentially
+/// slow IO) is done by the caller OUTSIDE the doc lock; this only mutates the
+/// in-memory doc, mirroring `on_image_generation`'s lock discipline.
+///
+/// Used by the file watcher and the turn-complete sweep. Accepts a lineage
+/// `source` so watcher-detected video outputs chain to the turn's source via
+/// `parent_id`, exactly like agent image outputs.
+///
+/// Idempotent on path: returns `None` if a file with this path is already tracked
+/// — the single chokepoint against double-minting from watcher / generation /
+/// reconcile. Caller must hold the doc lock.
+pub fn place_minted(
+    asset: &Asset,
+    source: Option<(&Placement, &Asset)>,
+    output_index: i64,
+    doc: &mut BoardDoc,
+) -> Option<Placement> {
+    if doc.assets.iter().any(|a| a.path == asset.path) {
+        return None;
+    }
+    let placement = make_derived_placement(asset, source, output_index, doc);
+    if !doc.assets.iter().any(|a| a.id == asset.id) {
+        doc.assets.push(asset.clone());
+    }
+    doc.placements.push(placement.clone());
+    Some(placement)
+}
+
 /// Make the folder the source of truth (PRD §4):
 /// - drop Assets/Placements whose file vanished,
 /// - mint an Asset + grid Placement for each new image file,
@@ -230,7 +259,7 @@ pub fn make_derived_placement(
 /// (Content-duplicate files keyed by path may yield Assets sharing a blake3 id;
 /// harmless — identical bytes render identically.)
 pub fn reconcile(folder: &Path, doc: &mut BoardDoc) {
-    let files = assets::scan_images(folder);
+    let files = assets::scan_media(folder);
     let on_disk: HashSet<&str> = files.iter().map(|s| s.as_str()).collect();
 
     let removed: Vec<String> = doc
@@ -301,6 +330,8 @@ mod tests {
             mime: "image/png".into(),
             created_at: 0,
             origin: Origin::Imported,
+            duration: None,
+            fps: None,
         }
     }
 

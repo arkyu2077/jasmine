@@ -11,6 +11,7 @@ pub mod codex;
 pub mod commands;
 pub mod config;
 pub mod device;
+pub mod ffmpeg;
 pub mod logging;
 pub mod model;
 pub mod paths;
@@ -25,11 +26,13 @@ pub mod session;
 pub mod storage;
 pub mod tray;
 pub mod updater;
+pub mod watch;
 pub mod workspace;
 
 use board::BoardRegistry;
 use codex::CodexRegistry;
 use std::sync::Arc;
+use watch::WatchRegistry;
 use tauri::{Manager, RunEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -42,6 +45,7 @@ pub fn run() {
 
     let boards: Arc<BoardRegistry> = Arc::new(BoardRegistry::default());
     let codex_reg: Arc<CodexRegistry> = Arc::new(CodexRegistry::default());
+    let watchers: Arc<WatchRegistry> = Arc::new(WatchRegistry::default());
     let codex_for_exit = codex_reg.clone();
 
     let app = tauri::Builder::default()
@@ -52,12 +56,26 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(boards)
         .manage(codex_reg)
+        .manage(watchers)
         .setup(|app| {
             // Auto-update is disabled until a Jasmine-owned update server is
             // configured (no `updater` endpoint in tauri.conf.json). To
             // re-enable: restore the `updater` block in tauri.conf.json and
             // re-add the startup check spawn (updater::check_update_on_startup).
             tray::setup(app)?;
+            // Resolve the bundled ffmpeg/ffprobe dir (externalBin next to the exe,
+            // or resources). Falls back to system PATH in dev when unset.
+            let resource_dir = app.path().resource_dir().ok();
+            let exe_dir = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+            let dir = ffmpeg::resolve_bundled_dir(resource_dir.as_deref(), exe_dir.as_deref());
+            if let Some(d) = &dir {
+                tracing::info!(module = "ffmpeg", "bundled ffmpeg dir: {}", d.display());
+            } else {
+                tracing::info!(module = "ffmpeg", "no bundled ffmpeg; using system PATH");
+            }
+            ffmpeg::set_bundled_dir(dir);
             Ok(())
         })
         // Close → hide to tray (default) or quit, per `config.close_to_tray`.

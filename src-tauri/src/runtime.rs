@@ -72,6 +72,16 @@ pub enum UnifiedEvent {
         caption: Option<String>,
         placeholder_id: Option<String>,
     },
+    /// A media file (video) Codex's ffmpeg produced — or the user dropped into the
+    /// folder — was detected by the file watcher, minted as an Asset, and placed
+    /// (right of the turn's source if attributable). The video analog of
+    /// `ImageGenerated`; `placeholder_id` is currently always `None` (the watcher
+    /// has no pre-claimed loading slot).
+    MediaIngested {
+        asset: Asset,
+        placement: Placement,
+        placeholder_id: Option<String>,
+    },
     /// Codex asked the client to approve something (auto-accepted in v1; shown).
     PermissionRequest {
         request_id: u64,
@@ -222,6 +232,47 @@ mod wire_contract {
         assert_eq!(
             wire(UnifiedEvent::PermissionRequest { request_id: 7, summary: "ok?".into() }),
             json!({ "kind": "permissionRequest", "requestId": 7, "summary": "ok?" }),
+        );
+        assert_eq!(
+            wire(UnifiedEvent::MediaIngested {
+                asset: Asset {
+                    id: "h".into(),
+                    path: "out.mp4".into(),
+                    width: 1920,
+                    height: 1080,
+                    mime: "video/mp4".into(),
+                    created_at: 5,
+                    origin: crate::model::Origin::Generated,
+                    duration: Some(3.5),
+                    fps: Some(30.0),
+                },
+                placement: Placement {
+                    id: "p1".into(),
+                    asset_id: "h".into(),
+                    x: 1.0,
+                    y: 2.0,
+                    scale: 0.5,
+                    rotation: 0.0,
+                    z: 3,
+                    crop: None,
+                    parent_id: Some("src".into()),
+                    from_op_id: None,
+                },
+                placeholder_id: None,
+            }),
+            json!({
+                "kind": "mediaIngested",
+                "asset": {
+                    "id": "h", "path": "out.mp4", "width": 1920, "height": 1080,
+                    "mime": "video/mp4", "createdAt": 5, "origin": "generated",
+                    "duration": 3.5, "fps": 30.0,
+                },
+                "placement": {
+                    "id": "p1", "assetId": "h", "x": 1.0, "y": 2.0, "scale": 0.5,
+                    "rotation": 0.0, "z": 3, "parentId": "src",
+                },
+                "placeholderId": null,
+            }),
         );
         assert_eq!(
             wire(UnifiedEvent::RateLimits {

@@ -1465,14 +1465,35 @@ body.cm-chat-resizing {
   color: var(--cm-subtle);
   pointer-events: none;
 }
+/* Affordance: when a reference pill is present but the editor isn't focused, the
+   native caret is hidden, so users couldn't tell they can type after the
+   reference. Show a blinking faux-caret right after the content; the real caret
+   takes over on focus (the :not(:focus) condition drops it). Pure CSS via :has()
+   (supported by the Tauri WebKit/WebView2 runtimes). */
+@keyframes cm-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+.cm-rich:has(.cm-pill):not(:focus)::after {
+  content: "";
+  display: inline-block;
+  width: 1.5px;
+  height: 1.05em;
+  margin-left: 2px;
+  background: var(--cm-fg);
+  vertical-align: text-bottom;
+  animation: cm-caret-blink 1s step-end infinite;
+}
 
 .cm-pill {
+  position: relative; /* anchor for the hover delete button */
   display: inline-flex;
   align-items: center;
   gap: 5px;
   vertical-align: middle;
   margin: 0 2px;
-  padding: 2px 7px 2px 3px;
+  padding: 3px; /* thumbnail-only: tight ring around the circle (no label text) */
   border-radius: var(--cm-radius-pill);
   background: var(--cm-accent);
   color: var(--cm-on-accent);
@@ -1487,6 +1508,34 @@ body.cm-chat-resizing {
   height: 18px;
   border-radius: 50%;
   object-fit: cover;
+}
+/* Unresolvable thumbnail → a plain circle instead of a broken image. */
+.cm-pill__img--empty {
+  background: var(--cm-on-accent);
+  opacity: 0.55;
+}
+/* Delete button — top-right corner, revealed on pill hover. Created only by the
+   composer's makePill (chat-history `cm-pill--inline` pills have none). */
+.cm-pill__del {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 15px;
+  height: 15px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--cm-surface);
+  color: var(--cm-accent);
+  box-shadow: 0 0 0 1px var(--cm-line);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.cm-pill:hover .cm-pill__del {
+  display: flex;
 }
 .cm-pill__label {
   max-width: 120px;
@@ -2183,6 +2232,53 @@ body.cm-chat-resizing {
 .cm-selbar__btn--danger:hover {
   background: var(--cm-danger-bg);
   color: var(--cm-danger);
+}
+
+/* Video playback bar — floats just below the selected video (the scene reports
+   the anchor every frame; VideoControls positions + drives playback). */
+.cm-vidbar {
+  position: absolute;
+  transform: translate(-50%, 0);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--cm-line);
+  border-radius: var(--cm-radius-lg);
+  box-shadow: var(--cm-shadow-2);
+  backdrop-filter: blur(10px);
+  z-index: var(--cm-z-floating);
+  user-select: none;
+  white-space: nowrap;
+}
+.cm-vidbar__btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--cm-fg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: var(--cm-radius-sm);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.cm-vidbar__btn:hover {
+  background: var(--cm-gray-100);
+}
+.cm-vidbar__scrub {
+  width: 140px;
+  accent-color: var(--cm-accent);
+  cursor: pointer;
+}
+.cm-vidbar__time {
+  font-size: 11px;
+  color: var(--cm-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 72px;
+  text-align: center;
 }
 .cm-selbar__sep {
   width: 1px;

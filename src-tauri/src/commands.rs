@@ -110,7 +110,11 @@ pub fn initial_test_prompt() -> Option<String> {
 /// Open (or create) a Board from a local folder. Reconciles folder→doc, then
 /// registers the in-memory authority and returns the full doc.
 #[tauri::command]
-pub fn open_board(path: String, registry: State<Arc<BoardRegistry>>) -> Result<BoardInfo, String> {
+pub fn open_board(
+    app: AppHandle,
+    path: String,
+    registry: State<Arc<BoardRegistry>>,
+) -> Result<BoardInfo, String> {
     let folder = PathBuf::from(&path);
     if !folder.is_dir() {
         return Err(format!("not a folder: {path}"));
@@ -151,6 +155,10 @@ pub fn open_board(path: String, registry: State<Arc<BoardRegistry>>) -> Result<B
         },
     );
     workspace::touch(&id, &folder, &name); // record in the recent-workspaces index
+
+    // Watch the folder for media files Codex's ffmpeg writes (real-time video
+    // intermediates). Replaces any prior watcher for this board.
+    crate::watch::start(&app, id.clone(), folder.clone());
 
     tracing::info!(module = "commands", board = %id, placements = doc.placements.len(), "board opened");
     Ok(BoardInfo {

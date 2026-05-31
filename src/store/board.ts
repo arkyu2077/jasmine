@@ -44,6 +44,11 @@ interface BoardState {
    *  re-grounds on the latest output — gap A3). Removes the loading placeholder
    *  it replaces. Rust already persisted it. */
   addGenerated: (asset: Asset, placement: Placement, placeholderId?: string | null) => void;
+  /** Merge a watcher-ingested media file (video) into the canvas mirror. Like
+   *  `addGenerated` but pushes NO undo entry — Codex can emit many intermediate
+   *  products per turn and they should not flood the undo stack. Rust already
+   *  persisted it. */
+  addIngested: (asset: Asset, placement: Placement) => void;
   /** Replace a Placement's annotation shapes (persists via IPC). */
   setAnnotation: (placementId: string, shapes: Shape[]) => void;
   /** Clear marks on the given images after they've been sent (no undo entry). */
@@ -304,6 +309,16 @@ export const useBoardStore = create<BoardState>((set, get) => ({
       void ipc.restorePlacements(boardId, [placement]).catch((e) => set({ error: String(e) }));
     };
     useHistoryStore.getState().push({ label: "Generate", undo: remove, redo: add });
+  },
+
+  addIngested: (asset, placement) => {
+    set((s) => {
+      const assets = new Map(s.assets);
+      assets.set(asset.id, asset);
+      const placements = new Map(s.placements);
+      placements.set(placement.id, placement);
+      return { assets, placements, selection: new Set([placement.id]) };
+    });
   },
 
   addPlaceholder: (id, rect) =>

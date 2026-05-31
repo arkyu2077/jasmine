@@ -165,6 +165,13 @@ fn build_augmented_path(include_shell_path: bool) -> String {
     #[cfg(windows)]
     let _ = include_shell_path;
     let mut parts: Vec<PathBuf> = Vec::new();
+    // Bundled ffmpeg/ffprobe must take priority over any system copy so Codex's
+    // shell runs the exact build we ship. Prepend before the inherited PATH —
+    // `push_unique` keeps the first occurrence, so this wins. `None` in dev
+    // (no bundled binaries) → Codex falls back to system ffmpeg on PATH.
+    if let Some(dir) = crate::ffmpeg::path_dir() {
+        push_unique(&mut parts, dir);
+    }
     if let Some(existing) = std::env::var_os("PATH") {
         push_split_path(&mut parts, &existing);
     }
@@ -1688,11 +1695,21 @@ async fn handle_notification(inner: &Arc<CodexSessionInner>, method: &str, param
                 tracing::warn!(module = "codex", status = %status, error = ?error, "turn did not complete");
             }
             clear_active_turn(inner);
+            // Snapshot the turn's sources BEFORE clearing so the post-turn media
+            // sweep can still attribute lineage (current_sources is cleared next).
+            let turn_sources = inner.current_sources.lock().clone();
             // Clear per-turn state so a stray late item can't leak / mis-place
             // against stale sources (review #3, #6).
             clear_stream_state(inner);
             cleanup_dispatch_overlays(inner);
             inner.emit(UnifiedEvent::TurnComplete { status, error });
+            // Backstop: catch any ffmpeg outputs the live watcher missed and place
+            // them with this turn's lineage. Runs off-thread so it never blocks
+            // the event loop. The live watcher handles real-time intermediates.
+            let sweep_inner = inner.clone();
+            tauri::async_runtime::spawn(async move {
+                sweep_turn_outputs(&sweep_inner, turn_sources).await;
+            });
         }
         "thread/tokenUsage/updated" => {
             let total = params.get("tokenUsage").and_then(|u| u.get("total"));
@@ -2060,6 +2077,92 @@ async fn on_image_generation(inner: &Arc<CodexSessionInner>, item: &Value) {
         caption,
         placeholder_id,
     });
+}
+
+/// Ingest a media file found in the folder (file watcher / post-turn sweep):
+/// mint OUTSIDE the doc lock (ffprobe + streaming hash are slow), place with
+/// optional turn lineage, persist, and emit `MediaIngested`. This is the video
+/// analog of `on_image_generation` — videos arrive as files Codex's ffmpeg wrote,
+/// not as a structured `imageGeneration` item, so the watcher drives this path.
+async fn place_and_emit_media(
+    inner: &Arc<CodexSessionInner>,
+    rel_name: &str,
+    source_ids: Vec<String>,
+) {
+    let Some(entry) = inner.registry.get(&inner.board_id) else {
+        return;
+    };
+    // Cheap path-dedup before the slow mint (the authoritative idempotency check
+    // is under the doc lock in `place_minted`; this just avoids needless ffprobe).
+    if entry.doc.lock().assets.iter().any(|a| a.path == rel_name) {
+        return;
+    }
+    let asset =
+        match assets::mint_asset(&inner.folder, rel_name, crate::model::Origin::Generated) {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::warn!(module = "codex", "ingest mint {rel_name} failed: {e}");
+                return;
+            }
+        };
+    let out_index = inner.output_index.fetch_add(1, Ordering::SeqCst) as i64;
+
+    let save_guard = entry.save.lock();
+    let placed = {
+        let mut doc = entry.doc.lock();
+        let source_pair = source_ids.first().and_then(|sid| {
+            let p = doc.placements.iter().find(|p| &p.id == sid)?.clone();
+            let a = doc.assets.iter().find(|a| a.id == p.asset_id)?.clone();
+            Some((p, a))
+        });
+        board::place_minted(
+            &asset,
+            source_pair.as_ref().map(|(p, a)| (p, a)),
+            out_index,
+            &mut doc,
+        )
+        .map(|pl| (pl, doc.clone()))
+    };
+    let Some((placement, doc_clone)) = placed else {
+        return; // already tracked (raced with another ingest path)
+    };
+    if let Err(e) = storage::save_board_doc(&inner.folder, &doc_clone) {
+        tracing::warn!(module = "codex", "save board after media ingest failed: {e}");
+    }
+    drop(save_guard);
+    inner.emit(UnifiedEvent::MediaIngested {
+        asset,
+        placement,
+        placeholder_id: None,
+    });
+}
+
+/// File-watcher entry point: a new media file settled in the folder. Attribute
+/// lineage to the in-flight turn's sources (if a turn is active); otherwise the
+/// file is treated as a manual addition with no parent.
+pub async fn on_external_media(inner: &Arc<CodexSessionInner>, rel_name: &str) {
+    let source_ids = if *inner.turn_in_flight.lock() {
+        inner.current_sources.lock().clone()
+    } else {
+        Vec::new()
+    };
+    place_and_emit_media(inner, rel_name, source_ids).await;
+}
+
+/// Backstop run at turn completion: ingest any media files the live watcher
+/// missed (dropped events, rapid writes), attributing them to the just-finished
+/// turn's sources. Idempotent — `place_and_emit_media` skips already-tracked paths.
+async fn sweep_turn_outputs(inner: &Arc<CodexSessionInner>, source_ids: Vec<String>) {
+    let known: std::collections::HashSet<String> = match inner.registry.get(&inner.board_id) {
+        Some(entry) => entry.doc.lock().assets.iter().map(|a| a.path.clone()).collect(),
+        None => return,
+    };
+    for name in assets::scan_media(&inner.folder) {
+        if known.contains(&name) {
+            continue;
+        }
+        place_and_emit_media(inner, &name, source_ids.clone()).await;
+    }
 }
 
 async fn handle_server_request(inner: &Arc<CodexSessionInner>, id: u64, method: &str) {

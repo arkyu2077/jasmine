@@ -11,6 +11,7 @@ import {
   Texture,
 } from "pixi.js";
 import type { Asset, Placement, PlacementUpdate, Shape, ShapeKind } from "../types";
+import { isVideoAsset } from "../types";
 import { jasmineUrl, ipc } from "../lib/ipc";
 import { loadAssetObjectUrl } from "../lib/asset-url";
 
@@ -84,6 +85,22 @@ interface Node {
   assetId: string;
   w: number;
   h: number;
+  /** Video lazy-render state. The poster (first frame) AND live playback are both
+   *  painted into the SAME 2D canvas, and the texture is updated from it. We do
+   *  NOT use `Texture.from(videoElement)` (WebGL video upload) because WebKit (the
+   *  Tauri webview) frequently refuses to upload `<video>` frames into a WebGL
+   *  texture — the 2D-canvas path is the one proven to render. On selection a
+   *  hidden `<video>` plays and pumps frames into the canvas; on deselect the pump
+   *  stops (last frame stays) and the decoder is released. */
+  isVideo: boolean;
+  /** Canvas-backed texture shown for the node (poster, then live frames). */
+  tex: Texture | null;
+  posterCanvas: HTMLCanvasElement | null;
+  posterCtx: CanvasRenderingContext2D | null;
+  /** The decoding video element (only while upgraded/playing). */
+  videoEl: HTMLVideoElement | null;
+  /** rAF handle for the frame pump when requestVideoFrameCallback is unavailable. */
+  pumpRaf: number;
 }
 
 interface WorldBounds {
@@ -162,6 +179,97 @@ async function loadBoardTexture(boardId: string, asset: Asset): Promise<Texture>
       URL.revokeObjectURL(objectUrl);
     }
   }
+}
+
+interface VideoPoster {
+  texture: Texture;
+  /** The canvas behind the texture — kept so live playback can repaint it. */
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  width: number;
+  height: number;
+  duration: number;
+}
+
+/**
+ * Decode the first frame of a video into a STATIC texture (poster). Uses a
+ * throwaway `<video>` element seeked to t=0 and drawn to a canvas, then frees the
+ * element so no decoder stays open — this is the cheap default for the many
+ * videos that may sit on a board. Live playback is a separate upgrade
+ * (`upgradeToVideo`). The element also reports the true width/height/duration,
+ * correcting metadata when ffprobe was unavailable at import.
+ */
+function loadVideoPoster(boardId: string, asset: Asset): Promise<VideoPoster> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    video.crossOrigin = "anonymous";
+    video.muted = true;
+    video.preload = "auto";
+    video.playsInline = true;
+
+    let settled = false;
+    let timer = 0;
+    const cleanup = () => {
+      if (timer) window.clearTimeout(timer);
+      video.removeAttribute("src");
+      video.load();
+    };
+    const fail = (e: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(e instanceof Error ? e : new Error(String(e)));
+    };
+    // Draw the current frame to a canvas → static texture. Tried on the FIRST of
+    // several events because engines differ: WebKit (the Tauri webview) often does
+    // NOT fire 'seeked' when seeking to an already-current time, so relying on
+    // 'seeked' alone leaves the promise hanging and the poster never appears.
+    const tryDraw = () => {
+      if (settled) return;
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (!w || !h) return; // not decodable yet — wait for a later event
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        fail(new Error("no 2d context for poster"));
+        return;
+      }
+      try {
+        ctx.drawImage(video, 0, 0, w, h);
+      } catch (e) {
+        fail(e);
+        return;
+      }
+      settled = true;
+      const texture = Texture.from(canvas);
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      cleanup();
+      resolve({ texture, canvas, ctx, width: w, height: h, duration });
+    };
+
+    video.addEventListener("error", () => fail(new Error(`video load failed: ${asset.path}`)));
+    // loadeddata → a frame is decoded (readyState ≥ HAVE_CURRENT_DATA); draw it.
+    // The tiny seek nudge coaxes WebKit to present frame 0; 'seeked'/'canplay'
+    // are backups if the first draw wasn't ready.
+    video.addEventListener("loadeddata", () => {
+      tryDraw();
+      if (!settled) {
+        try {
+          video.currentTime = 0.001;
+        } catch {
+          /* ignore — backup events will fire */
+        }
+      }
+    });
+    video.addEventListener("seeked", tryDraw);
+    video.addEventListener("canplay", tryDraw);
+    // Don't let a hung decode leave a stuck placeholder forever.
+    timer = window.setTimeout(() => fail(new Error("poster timeout")), 8000);
+    video.src = jasmineUrl(boardId, asset.path);
+  });
 }
 
 /**
@@ -417,6 +525,7 @@ export class CanvasScene {
   setSelection(ids: string[]): void {
     this.selected = new Set(ids);
     this.refreshOutlines();
+    this.syncVideoPlayback();
   }
 
   setTool(tool: Tool): void {
@@ -810,7 +919,24 @@ export class CanvasScene {
     const outline = new Graphics();
     container.addChild(outline);
 
-    const node: Node = { container, placeholder, outline, anno, noteLayer, content: null, assetId: p.assetId, w, h };
+    const isVideo = !!asset && isVideoAsset(asset);
+    const node: Node = {
+      container,
+      placeholder,
+      outline,
+      anno,
+      noteLayer,
+      content: null,
+      assetId: p.assetId,
+      w,
+      h,
+      isVideo,
+      tex: null,
+      posterCanvas: null,
+      posterCtx: null,
+      videoEl: null,
+      pumpRaf: 0,
+    };
     container.on("pointerdown", (e: FederatedPointerEvent) => this.onNodePointerDown(p.id, e));
 
     this.applyTransform(node, p);
@@ -818,33 +944,218 @@ export class CanvasScene {
     this.placementLayer.addChild(container);
     this.nodes.set(p.id, node);
 
-    if (this.boardId && asset) {
-      loadBoardTexture(this.boardId, asset)
-        .then((tex) => {
+    if (!this.boardId || !asset) return;
+
+    if (isVideo) {
+      // Video: render the static first frame (poster); live decoding only when
+      // selected (see syncVideoPlayback). Keeps many videos on a board cheap.
+      loadVideoPoster(this.boardId, asset)
+        .then((poster) => {
           const current = this.nodes.get(p.id);
           if (this.destroyed || current !== node || current.assetId !== p.assetId) {
-            tex.destroy(true);
+            poster.texture.destroy(true);
             return;
           }
-          const sprite = new Sprite(tex);
+          node.tex = poster.texture;
+          node.posterCanvas = poster.canvas;
+          node.posterCtx = poster.ctx;
+          const sprite = new Sprite(poster.texture);
           sprite.anchor.set(0.5);
           node.content = sprite;
-          container.addChildAt(sprite, 1); // above placeholder, below outline
+          container.addChildAt(sprite, 1);
           node.placeholder.visible = false;
-          // Correct dims to the true texture size.
-          node.w = tex.width;
-          node.h = tex.height;
+          node.w = poster.width;
+          node.h = poster.height;
           this.drawOutline(node, this.selected.has(p.id));
           this.drawAnnotation(p.id, node, this.annotations.get(p.id) ?? []);
+          // If it's already the selected node, upgrade to live now.
+          if (this.selected.has(p.id)) this.upgradeToVideo(node);
         })
         .catch((err) => {
-          console.error("texture load failed", asset.path, err);
-          void ipc.frontLog("error", `texture load failed ${asset.path}: ${err}`);
+          console.error("video poster load failed", asset.path, err);
+          void ipc.frontLog("error", `video poster load failed ${asset.path}: ${err}`);
         });
+      return;
+    }
+
+    loadBoardTexture(this.boardId, asset)
+      .then((tex) => {
+        const current = this.nodes.get(p.id);
+        if (this.destroyed || current !== node || current.assetId !== p.assetId) {
+          tex.destroy(true);
+          return;
+        }
+        const sprite = new Sprite(tex);
+        sprite.anchor.set(0.5);
+        node.content = sprite;
+        container.addChildAt(sprite, 1); // above placeholder, below outline
+        node.placeholder.visible = false;
+        // Correct dims to the true texture size.
+        node.w = tex.width;
+        node.h = tex.height;
+        this.drawOutline(node, this.selected.has(p.id));
+        this.drawAnnotation(p.id, node, this.annotations.get(p.id) ?? []);
+      })
+      .catch((err) => {
+        console.error("texture load failed", asset.path, err);
+        void ipc.frontLog("error", `texture load failed ${asset.path}: ${err}`);
+      });
+  }
+
+  /** Paint the video element's current frame into the node's canvas and push it
+   *  to the GPU. The texture/sprite never change — only the canvas pixels. */
+  private drawVideoFrame(node: Node, video: HTMLVideoElement): void {
+    const canvas = node.posterCanvas;
+    const ctx = node.posterCtx;
+    if (!canvas || !ctx || !node.tex) return;
+    if (video.readyState < 2 || !video.videoWidth) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    node.tex.source.update();
+  }
+
+  /** Upgrade a video node to live playback: a hidden `<video>` plays and pumps
+   *  its frames into the node's canvas (which the texture already shows). Avoids
+   *  WebGL `<video>` upload, which WebKit blocks. Muted + looping. Idempotent. */
+  private upgradeToVideo(node: Node): void {
+    if (!this.boardId || !node.isVideo || node.videoEl) return;
+    const asset = this.assets.get(node.assetId);
+    if (!asset || !node.content || !node.posterCanvas) return;
+    const video = document.createElement("video");
+    video.src = jasmineUrl(this.boardId, asset.path);
+    video.crossOrigin = "anonymous";
+    video.muted = true; // V1: audio off by default
+    video.loop = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    node.videoEl = video;
+
+    type RVFC = HTMLVideoElement & {
+      requestVideoFrameCallback?: (cb: () => void) => number;
+    };
+    const v = video as RVFC;
+    const pump = () => {
+      if (node.videoEl !== video) return; // downgraded → stop
+      this.drawVideoFrame(node, video);
+      if (typeof v.requestVideoFrameCallback === "function") v.requestVideoFrameCallback(pump);
+    };
+    void video.play().catch(() => {
+      /* autoplay can reject; the static poster frame stays visible */
+    });
+    if (typeof v.requestVideoFrameCallback === "function") {
+      v.requestVideoFrameCallback(pump);
+    } else {
+      // Fallback: drive frames off rAF where requestVideoFrameCallback is absent.
+      const loop = () => {
+        if (node.videoEl !== video) return;
+        this.drawVideoFrame(node, video);
+        node.pumpRaf = requestAnimationFrame(loop);
+      };
+      node.pumpRaf = requestAnimationFrame(loop);
     }
   }
 
+  /** Downgrade a video node back to a static frame: stop the pump, pause and
+   *  release the decoder (browsers cap concurrent video decoders). The last
+   *  painted frame stays on the canvas/texture. */
+  private downgradeToPoster(node: Node): void {
+    if (!node.isVideo || !node.videoEl) return;
+    const video = node.videoEl;
+    node.videoEl = null; // makes the pump's `node.videoEl !== video` guard fire
+    if (node.pumpRaf) {
+      cancelAnimationFrame(node.pumpRaf);
+      node.pumpRaf = 0;
+    }
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+  }
+
+  /** Selected video nodes decode live; everything else falls back to its poster.
+   *  Called whenever the selection changes. */
+  private syncVideoPlayback(): void {
+    for (const [id, node] of this.nodes) {
+      if (!node.isVideo) continue;
+      if (this.selected.has(id)) this.upgradeToVideo(node);
+      else this.downgradeToPoster(node);
+    }
+  }
+
+  /** The single selected node if it's a live video, else null. */
+  private selectedVideoNode(): Node | null {
+    if (this.selected.size !== 1) return null;
+    const node = this.nodes.get([...this.selected][0]);
+    return node && node.isVideo ? node : null;
+  }
+
+  /** Playback state of the selected video for the control bar (null if none). */
+  videoControlState(): { playing: boolean; muted: boolean; currentTime: number; duration: number } | null {
+    const v = this.selectedVideoNode()?.videoEl;
+    if (!v) return null;
+    return {
+      playing: !v.paused,
+      muted: v.muted,
+      currentTime: v.currentTime || 0,
+      duration: Number.isFinite(v.duration) ? v.duration : 0,
+    };
+  }
+
+  /** Bottom-center screen anchor of the selected video (for the control bar). */
+  videoControlAnchor(): { x: number; y: number } | null {
+    const node = this.selectedVideoNode();
+    if (!node?.videoEl) return null;
+    const b = this.liveScreenBounds(node);
+    return { x: b.x + b.w / 2, y: b.y + b.h };
+  }
+
+  videoTogglePlay(): void {
+    const node = this.selectedVideoNode();
+    const v = node?.videoEl;
+    if (!v || !node) return;
+    if (v.paused) {
+      void v.play().catch(() => {});
+    } else {
+      v.pause();
+      this.drawVideoFrame(node, v); // ensure the paused frame is shown
+    }
+  }
+
+  videoToggleMuted(): void {
+    const v = this.selectedVideoNode()?.videoEl;
+    if (v) v.muted = !v.muted;
+  }
+
+  /** Seek the selected video to a fraction [0,1] of its duration. */
+  videoSeekFrac(frac: number): void {
+    const node = this.selectedVideoNode();
+    const v = node?.videoEl;
+    if (!v || !node || !Number.isFinite(v.duration) || v.duration <= 0) return;
+    v.currentTime = clamp(frac, 0, 1) * v.duration;
+    // Paint the seeked frame even while paused (a 'seeked' listener repaints too).
+    v.addEventListener("seeked", () => this.drawVideoFrame(node, v), { once: true });
+  }
+
   private destroyNode(node: Node): void {
+    if (node.pumpRaf) {
+      cancelAnimationFrame(node.pumpRaf);
+      node.pumpRaf = 0;
+    }
+    if (node.videoEl) {
+      node.videoEl.pause();
+      node.videoEl.removeAttribute("src");
+      node.videoEl.load();
+      node.videoEl = null;
+    }
+    if (node.isVideo) {
+      // One canvas-backed texture for poster + live frames; free it explicitly,
+      // then drop the sprite without a second texture-destroy (double-free).
+      node.tex?.destroy(true);
+      node.tex = null;
+      node.posterCanvas = null;
+      node.posterCtx = null;
+      node.content?.destroy({ texture: false });
+      node.container.destroy({ children: true });
+      return;
+    }
     node.content?.destroy({ texture: true, textureSource: true });
     node.container.destroy({ children: true });
   }
@@ -1344,6 +1655,7 @@ export class CanvasScene {
   private commitSelection(ids: Set<string>): void {
     this.selected = ids;
     this.refreshOutlines();
+    this.syncVideoPlayback();
     this.cb.onSelectionChange?.([...ids]);
   }
 

@@ -7,6 +7,7 @@ import { useWorkspaceStore } from "../store/workspace";
 import { ipc } from "../lib/ipc";
 import { SelectionBar } from "../components/SelectionBar";
 import { CropOverlay } from "../components/CropOverlay";
+import { VideoControls } from "../components/VideoControls";
 import { CanvasContextMenu } from "../components/CanvasContextMenu";
 import { useT } from "../i18n/locale";
 import { useFileImport } from "../lib/useFileImport";
@@ -24,6 +25,7 @@ export function JasmineCanvas() {
   const sceneRef = useRef<CanvasScene | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const cropRef = useRef<HTMLDivElement>(null);
+  const vidBarRef = useRef<HTMLDivElement>(null);
   const [ctxMenu, setCtxMenu] = useState<CanvasContextTarget | null>(null);
   const chatOpen = useUiStore((s) => s.chatOpen);
   const chatWidth = useUiStore((s) => s.chatWidth);
@@ -233,6 +235,7 @@ export function JasmineCanvas() {
       <div ref={hostRef} className="cm-canvas-host" />
       <SelectionBar rootRef={barRef} />
       <CropOverlay rootRef={cropRef} />
+      <VideoControls rootRef={vidBarRef} getScene={() => sceneRef.current} />
       <CanvasContextMenu
         menu={ctxMenu}
         onClose={() => setCtxMenu(null)}

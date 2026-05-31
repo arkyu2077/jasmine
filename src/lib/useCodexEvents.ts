@@ -24,6 +24,8 @@ export function useCodexEvents() {
         void ipc.frontLog("info", `generating placeholder shown ${event.placeholderId}`);
       } else if (event.kind === "imageGenerated") {
         board.addGenerated(event.asset, event.placement, event.placeholderId);
+      } else if (event.kind === "mediaIngested") {
+        board.addIngested(event.asset, event.placement);
       } else if (
         event.kind === "turnComplete" ||
         event.kind === "sessionComplete" ||

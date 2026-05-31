@@ -22,11 +22,18 @@ The working directory is the user's Board folder. It contains the image files th
 - Generated output is a whole new image; pixel-perfect preservation of untouched regions is not guaranteed, and that is acceptable.
 - If the request is ambiguous, it is fine to ask a brief clarifying question instead of guessing."#;
 
+    // ── Video-handling (V1: deterministic edits via ffmpeg; see watch.rs) ──
+    let video = r#"Video-handling principles:
+- `ffmpeg` and `ffprobe` are available on your PATH. Use them for all video work: trimming, concatenation, frame extraction, filters, speed changes, transcoding.
+- Write outputs into the working directory. Produce a NEW file for each step — never overwrite an original or a previous output (originals are immutable and Jasmine records lineage). Intermediate products are fine; they appear on the canvas automatically.
+- IMPORTANT — avoid the canvas picking up half-written files: write to a temporary name first (e.g. `clip.mp4.part`) and then rename it to the final `.mp4` once ffmpeg finishes. The rename is atomic; the partial name is ignored until then.
+- Prefer H.264 video + AAC audio in an `.mp4` container with `-movflags +faststart` (most compatible with the canvas player). Accept `.mov`/`.webm`/`.mkv` as inputs, but do not produce VP9/WebM/MKV outputs."#;
+
     // ── Workspace usage ──
     let workspace = r#"Workspace usage:
 - Do all file work inside the working directory.
 - Do not read, write, or modify anything under the .jasmine/ subdirectory — that is Jasmine's private state.
 - Keep responses concise; the user is watching results appear on a canvas, not reading long prose."#;
 
-    format!("{product}\n\n{principles}\n\n{workspace}")
+    format!("{product}\n\n{principles}\n\n{video}\n\n{workspace}")
 }

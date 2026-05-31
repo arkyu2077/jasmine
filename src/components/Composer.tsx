@@ -9,13 +9,8 @@ import { jasmineUrl, ipc } from "../lib/ipc";
 import { buildOverlays, buildMarkNotes, annotatedImages } from "../lib/overlay";
 import { GalleryButton } from "./gallery/GalleryButton";
 
-function stem(path: string): string {
-  const base = path.split(/[/\\]/).pop() ?? path;
-  const s = base.replace(/\.[^.]+$/, "");
-  return s.length > 14 ? s.slice(0, 13) + "…" : s;
-}
-
 const IMAGE_EXTS = ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "avif"];
+const MEDIA_EXTS = [...IMAGE_EXTS, "mp4", "mov", "webm", "mkv", "m4v"];
 
 function sendErrorMessage(e: unknown): string {
   return `Could not send this turn: ${e instanceof Error ? e.message : String(e)}`;
@@ -62,17 +57,41 @@ export function Composer() {
     span.contentEditable = "false";
     span.dataset.pid = pid;
     if (ghost) span.dataset.ghost = "1";
+    // Thumbnail only — the filename (a hash) was noise; the thumbnail identifies
+    // the reference. Unresolvable thumbs fall back to an empty circle, not text.
     const r = resolve(pid);
-    if (r) {
-      const img = document.createElement("img");
-      img.src = r.url;
-      img.className = "cm-pill__img";
-      span.appendChild(img);
-    }
-    const label = document.createElement("span");
-    label.className = "cm-pill__label";
-    label.textContent = r ? stem(r.path) : t("composer.imagePill");
-    span.appendChild(label);
+    const img = document.createElement("img");
+    img.className = "cm-pill__img" + (r ? "" : " cm-pill__img--empty");
+    if (r) img.src = r.url;
+    span.appendChild(img);
+    // Hover-only delete button at the top-right; removes this reference.
+    const del = document.createElement("span");
+    del.className = "cm-pill__del";
+    del.contentEditable = "false";
+    del.setAttribute("aria-label", "remove reference");
+    del.textContent = "×";
+    // mousedown (not click) + preventDefault so the caret never jumps into the
+    // pill and the editor's mousedown handler doesn't also fire.
+    del.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      span.remove();
+      // If removing the last pill leaves only whitespace, clear the editor so the
+      // `:empty` placeholder returns (otherwise a stray text node hides it).
+      const editor = editorRef.current;
+      if (editor && !editor.querySelector(".cm-pill") && !(editor.textContent ?? "").trim()) {
+        editor.innerHTML = "";
+        lastRange.current = null;
+      }
+      // Drop this image from the canvas selection so a ghost doesn't immediately
+      // re-appear (ghosts mirror the selection); harmless for committed pills.
+      const s = useBoardStore.getState();
+      if (s.selection.has(pid)) {
+        s.setSelection([...s.selection].filter((id) => id !== pid));
+      }
+      refreshHasContent();
+    });
+    span.appendChild(del);
     return span;
   };
 
@@ -99,14 +118,28 @@ export function Composer() {
     sel.addRange(range);
   };
 
+  /** A collapsed range at the very end of the editor that is guaranteed to
+   *  render a visible caret. WebKit shows NO caret right after a trailing
+   *  contentEditable=false pill when no text node follows it, so if the last
+   *  child isn't a text node (i.e. it's a pill) we append a space for the caret
+   *  to live in. The space is dropped on send (`extract` trims/normalizes). */
+  const caretAtEnd = (editor: HTMLElement): Range => {
+    let last = editor.lastChild;
+    if (!last || last.nodeType !== Node.TEXT_NODE) {
+      last = editor.appendChild(document.createTextNode(" "));
+    }
+    const r = document.createRange();
+    r.selectNodeContents(last);
+    r.collapse(false); // end of the (text) node
+    return r;
+  };
+
   /** Drop the caret at the very end of the editor (after the pills). */
   const moveCaretToEnd = () => {
     const editor = editorRef.current;
     if (!editor) return;
     editor.focus();
-    const r = document.createRange();
-    r.selectNodeContents(editor);
-    r.collapse(false);
+    const r = caretAtEnd(editor);
     lastRange.current = r.cloneRange();
     setCaret(r);
   };
@@ -136,9 +169,14 @@ export function Composer() {
         range.collapse(true);
       }
       // Keep the caret to the RIGHT of the inserted reference(s): remember it as
-      // the anchor, and move the visible caret there if the editor is focused.
+      // the anchor, and move the visible caret there if the editor is focused
+      // (via caretAtEnd so a visible caret renders after the trailing pill).
       lastRange.current = range.cloneRange();
-      if (document.activeElement === editor) setCaret(range.cloneRange());
+      if (document.activeElement === editor) {
+        const home = caretAtEnd(editor);
+        lastRange.current = home.cloneRange();
+        setCaret(home);
+      }
     }
     syncing.current = false;
     refreshHasContent();
@@ -156,12 +194,11 @@ export function Composer() {
       last = g;
     });
     if (last) {
-      const r = document.createRange();
-      r.setStartAfter(last);
-      r.collapse(true);
+      // Drop the caret to the RIGHT of the just-committed reference so typing
+      // continues after it. caretAtEnd ensures a trailing text node exists so
+      // WebKit actually renders the caret (a pill alone leaves it invisible).
+      const r = caretAtEnd(editor);
       lastRange.current = r.cloneRange();
-      // On focus, drop the caret to the RIGHT of the just-committed reference
-      // so typing continues after it (browser would otherwise leave it before).
       setCaret(r.cloneRange());
     }
     refreshHasContent();
@@ -187,8 +224,8 @@ export function Composer() {
   const addImages = async () => {
     const sel = await open({
       multiple: true,
-      title: "Add images",
-      filters: [{ name: "Images", extensions: IMAGE_EXTS }],
+      title: "Add media",
+      filters: [{ name: "Media", extensions: MEDIA_EXTS }],
     });
     const paths = Array.isArray(sel) ? sel : sel ? [sel] : [];
     if (!paths.length) return;
@@ -409,8 +446,13 @@ export function Composer() {
           onPaste={onPaste}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
+              // Enter no longer sends — it "confirms": commit any pending ghost
+              // reference pills and drop to a new line. Sending is now ONLY via
+              // the send button (mouse click). Shift+Enter still inserts a newline.
               e.preventDefault();
-              dispatch();
+              commitGhosts();
+              document.execCommand("insertLineBreak");
+              refreshHasContent();
             }
           }}
         />
