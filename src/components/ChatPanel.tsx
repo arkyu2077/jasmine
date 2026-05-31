@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Plus, History, ChevronDown, ChevronUp, X, TriangleAlert, Image as ImageIcon, RefreshCw, Copy, ExternalLink } from "lucide-react";
+import { Plus, History, ChevronDown, ChevronUp, X, TriangleAlert, Image as ImageIcon, RefreshCw, Copy, ExternalLink, Settings as SettingsIcon } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useChatStore, type ChatBlock, type ChatMessage, type RateLimit, type SessionStatus } from "../store/chat";
 import { useBoardStore } from "../store/board";
@@ -13,7 +13,8 @@ import { StreamingStatus } from "./StreamingStatus";
 import { AssistantMarkdown } from "./AssistantMarkdown";
 import { useT, useLocaleStore } from "../i18n/locale";
 import type { MsgKey } from "../i18n/messages";
-import codexIcon from "../assets/codex.png";
+import jasmineIcon from "../assets/jasmine.png";
+import { isValidProviderBaseUrl } from "../lib/provider";
 
 /** "本轮标注" — staging area above the composer: every image carrying marks +
  *  their numbered notes, removable. This is the visible "what gets sent" with
@@ -326,18 +327,35 @@ function QuotaRow({
   );
 }
 
-/** Clickable agent capsule that drops a status panel: Codex detection (path +
- *  version) + connection state, or install guidance when not found. Runtime-
- *  agnostic — a future agent just swaps the icon/name + detection source. */
-function AgentStatus({ status, rateLimit }: { status: SessionStatus; rateLimit: RateLimit | null }) {
+/** Clickable agent capsule that drops a model/provider status panel. */
+function AgentStatus({
+  status,
+  rateLimit,
+  onOpenSettings,
+}: {
+  status: SessionStatus;
+  rateLimit: RateLimit | null;
+  onOpenSettings: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [info, setInfo] = useState<CodexInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const boardId = useBoardStore((s) => s.boardId);
+  const loaded = useSettingsStore((s) => s.loaded);
+  const provider = useSettingsStore((s) => s.config.provider);
   const t = useT();
   const lang = useLocaleStore((s) => s.lang);
   const statusLabel = t(`agent.status.${status}` as MsgKey);
+  const providerProfiles = provider.profiles.length ? provider.profiles : [];
+  const activeProviderId = provider.active_id ?? providerProfiles[0]?.id ?? "";
+  const providerName = provider.name.trim() || t("agent.provider.external");
+  const activeProviderLabel = provider.enabled ? providerName : "Codex";
+  const selectedProviderValue = provider.enabled ? `provider:${activeProviderId}` : "codex";
+  const providerApiLabel =
+    provider.api_kind === "responses"
+      ? t("agent.provider.protocol.responses")
+      : t("agent.provider.protocol.chatCompletions");
 
   const detect = useCallback(() => {
     setLoading(true);
@@ -358,9 +376,34 @@ function AgentStatus({ status, rateLimit }: { status: SessionStatus; rateLimit: 
     setOpen(false);
   }, [boardId]);
 
+  const chooseProvider = useCallback((value: string) => {
+    const settings = useSettingsStore.getState();
+    if (value === "codex") {
+      settings.setProvider({ enabled: false });
+      void settings.commitProvider();
+      return;
+    }
+
+    const profileId = value.startsWith("provider:") ? value.slice("provider:".length) : "";
+    settings.selectProviderProfile(profileId);
+    const selected = useSettingsStore.getState().config.provider;
+    if (!isValidProviderBaseUrl(selected.base_url)) {
+      setOpen(false);
+      onOpenSettings();
+      return;
+    }
+
+    settings.setProvider({ enabled: true });
+    void settings.commitProvider();
+  }, [onOpenSettings]);
+
   useEffect(() => {
-    if (open && !info) detect();
-  }, [open, info, detect]);
+    if (!loaded) void useSettingsStore.getState().load();
+  }, [loaded]);
+
+  useEffect(() => {
+    if (open && !provider.enabled && !info) detect();
+  }, [open, provider.enabled, info, detect]);
 
   useEffect(() => {
     if (!open) return;
@@ -380,31 +423,81 @@ function AgentStatus({ status, rateLimit }: { status: SessionStatus; rateLimit: 
 
   return (
     <div className="cm-agent-wrap" ref={ref}>
-      <button className="cm-agent" title={`Codex · ${statusLabel}`} onClick={() => setOpen((o) => !o)}>
-        <img className="cm-agent__icon" src={codexIcon} alt="" />
-        <span className="cm-agent__name">Codex</span>
+      <button className="cm-agent" title={`${activeProviderLabel} · ${statusLabel}`} onClick={() => setOpen((o) => !o)}>
+        <img className="cm-agent__icon" src={jasmineIcon} alt="" />
+        <span className="cm-agent__name">{activeProviderLabel}</span>
         <span className="cm-agent__dot" data-status={status} aria-hidden />
         <ChevronDown size={13} className="cm-agent__caret" />
       </button>
       {open && (
         <div className="cm-agent-pop">
-          {loading && !info ? (
+          <div className="cm-agent-pop__provider">
+            <span className="cm-agent-pop__k">{t("agent.provider")}</span>
+            <select
+              className="cm-agent-pop__select"
+              value={selectedProviderValue}
+              aria-label={t("agent.provider")}
+              onChange={(e) => chooseProvider(e.target.value)}
+            >
+              <option value="codex">{t("agent.provider.codex")}</option>
+              {providerProfiles.map((profile) => (
+                <option key={profile.id} value={`provider:${profile.id}`}>
+                  {profile.name.trim() || t("settings.providerUnnamed")}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            className="cm-agent-pop__link cm-agent-pop__configure"
+            onClick={() => {
+              setOpen(false);
+              onOpenSettings();
+            }}
+          >
+            <SettingsIcon size={12} />
+            {t("agent.provider.configure")}
+          </button>
+          <p className="cm-agent-pop__route">
+            {provider.enabled
+              ? t("agent.provider.routeExternal", { provider: providerName })
+              : t("agent.provider.routeCodex")}
+          </p>
+          {provider.enabled ? (
+            <>
+              <div className="cm-agent-pop__row">
+                <span className="cm-agent-pop__k">{t("agent.provider.endpoint")}</span>
+                <span className="cm-agent-pop__v cm-agent-pop__path" title={provider.base_url}>
+                  {provider.base_url || "—"}
+                </span>
+              </div>
+              <div className="cm-agent-pop__row">
+                <span className="cm-agent-pop__k">{t("agent.provider.protocol")}</span>
+                <span className="cm-agent-pop__v">{providerApiLabel}</span>
+              </div>
+              <div className="cm-agent-pop__row">
+                <span className="cm-agent-pop__k">{t("agent.provider.model")}</span>
+                <span className="cm-agent-pop__v">{provider.model || "—"}</span>
+              </div>
+            </>
+          ) : loading && !info ? (
             <div className="cm-agent-pop__hint">{t("agent.detecting")}</div>
           ) : info?.found ? (
             <>
+              <div className="cm-agent-pop__section-title">{t("agent.bridge")}</div>
               <div className="cm-agent-pop__row">
-                <span className="cm-agent-pop__k">{t("agent.connection")}</span>
+                <span className="cm-agent-pop__k">{t("agent.bridgeStatus")}</span>
                 <span className="cm-agent-pop__status">
                   <span className="cm-agent__dot" data-status={status} aria-hidden />
                   {statusLabel}
                 </span>
               </div>
               <div className="cm-agent-pop__row">
-                <span className="cm-agent-pop__k">{t("agent.version")}</span>
+                <span className="cm-agent-pop__k">{t("agent.cliVersion")}</span>
                 <span className="cm-agent-pop__v">{info.version ?? "—"}</span>
               </div>
               <div className="cm-agent-pop__row">
-                <span className="cm-agent-pop__k">{t("agent.path")}</span>
+                <span className="cm-agent-pop__k">{t("agent.cliPath")}</span>
                 <span className="cm-agent-pop__v cm-agent-pop__path" title={info.path ?? ""}>
                   {info.path ?? "—"}
                 </span>
@@ -551,6 +644,17 @@ function Block({
           <div className="cm-genimg cm-genimg--pending" aria-busy="true">
             <span className="cm-genimg__spin" />
             <span className="cm-genimg__label">{t("chat.imageGenerating")}</span>
+          </div>
+        );
+      }
+      if (block.status === "failed") {
+        // Turn ended before `imageGenerated` arrived — no artifact to link to.
+        // Show a settled "not generated" card so the user knows the turn died
+        // here instead of waiting on a spinner that never resolves.
+        return (
+          <div className="cm-genimg cm-genimg--failed">
+            <TriangleAlert size={13} className="cm-genimg__ico" />
+            <span className="cm-genimg__label">{t("chat.imageFailed")}</span>
           </div>
         );
       }
@@ -716,7 +820,7 @@ export function ChatPanel({ onOpenSettings }: { onOpenSettings: () => void }) {
         onPointerDown={beginResize}
       />
       <div className="cm-chat__header">
-        <AgentStatus status={sessionStatus} rateLimit={rateLimit} />
+        <AgentStatus status={sessionStatus} rateLimit={rateLimit} onOpenSettings={onOpenSettings} />
         <div className="cm-chat__hspacer" />
         <SessionControls />
       </div>
@@ -737,14 +841,11 @@ export function ChatPanel({ onOpenSettings }: { onOpenSettings: () => void }) {
             <AssistantMessage m={m} key={m.id} />
           )
         )}
-        {/* Ambient indicator — visible the ENTIRE time a turn is running,
-            including the long thinking/tool/image phases the old per-message
-            Working… row missed. Self-mounts/unmounts on turnStatus. */}
-        <StreamingStatus />
       </div>
 
       <div className="cm-chat__bottom">
         <TodoFloat />
+        <StreamingStatus />
         <MarkStaging />
         {networkBlocked && <NetworkWarning onOpenSettings={onOpenSettings} />}
         <Composer />

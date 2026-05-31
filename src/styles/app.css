@@ -1,4 +1,4 @@
-/* Cameo — light + red design system. Token reference: specs/DESIGN.md §15.
+/* Jasmine — light + red design system. Token reference: specs/DESIGN.md §15.
    This stylesheet only carries appearance; layout/positioning mirrors the
    imperative scene + component structure. */
 
@@ -545,6 +545,10 @@ body.cm-chat-resizing {
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--cm-fg);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cm-agent__dot {
   width: 7px;
@@ -584,6 +588,55 @@ body.cm-chat-resizing {
   font-size: 12px;
   color: var(--cm-muted);
   padding: 4px 0;
+}
+.cm-agent-pop__provider {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--cm-line);
+  font-size: 12px;
+}
+.cm-agent-pop__select {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid var(--cm-gray-300);
+  border-radius: var(--cm-radius-sm);
+  background: var(--cm-surface);
+  color: var(--cm-fg);
+  font: inherit;
+  font-size: 12px;
+  padding: 0 28px 0 10px;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--cm-muted) 50%),
+    linear-gradient(135deg, var(--cm-muted) 50%, transparent 50%);
+  background-position: calc(100% - 15px) center, calc(100% - 10px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.cm-agent-pop__select:focus {
+  outline: none;
+  border-color: var(--cm-accent);
+  box-shadow: var(--cm-focus-ring);
+}
+.cm-agent-pop__configure {
+  align-self: flex-start;
+  margin-bottom: 2px;
+}
+.cm-agent-pop__route {
+  margin: -2px 0 2px;
+  color: var(--cm-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.cm-agent-pop__section-title {
+  padding-top: 4px;
+  color: var(--cm-fg);
+  font-size: 11px;
+  font-weight: 600;
 }
 .cm-agent-pop__row {
   display: flex;
@@ -718,7 +771,7 @@ body.cm-chat-resizing {
   font-size: 12px;
   color: var(--cm-accent-text);
   cursor: pointer;
-  padding: 0;
+  padding: 0 9px;
 }
 .cm-agent-pop__link:hover {
   text-decoration: underline;
@@ -1109,6 +1162,24 @@ body.cm-chat-resizing {
   flex-shrink: 0;
 }
 
+/* "Image not generated" failed state — the turn settled while the block was
+   still generating (imageGenerated never arrived). Inert, danger-tinted so it
+   reads as a dead end rather than a pending or finished artifact. */
+.cm-genimg--failed {
+  cursor: default;
+  color: var(--cm-danger);
+  background: var(--cm-danger-bg);
+  border-style: dashed;
+  border-color: var(--cm-danger);
+}
+.cm-genimg--failed:hover {
+  background: var(--cm-danger-bg); /* override the default :hover from .cm-genimg */
+  border-color: var(--cm-danger);
+}
+.cm-genimg__ico {
+  flex-shrink: 0;
+}
+
 /* Chat inline image — a path-mention card embedded directly in the AI's text.
    Renders inline-flex so it sits ON the same line as surrounding words. */
 /* Pending / missing chip — small inline marker while we don't have an image
@@ -1194,43 +1265,106 @@ body.cm-chat-resizing {
   min-width: 168px;
 }
 
-/* Ambient "agent is working" status row. Sits at the bottom of the message
-   list, above the composer. Muted typography so it never competes with the
-   actual chat content but stays visibly present for the entire turn. */
+/* Turn monitor. Lives above the composer so progress stays visible even when
+   the last assistant message is long or the model is quiet. */
 .cm-streaming-status {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 7px;
-  /* No horizontal padding — the parent `.cm-chat__messages` already adds
-     16px×14px padding; doubling here pushes us indented relative to the
-     other blocks above. Only a small top gap to breathe off the last block. */
-  padding: 4px 0 0;
+  border-top: 1px solid var(--cm-divider);
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.96);
   font-size: 12px;
   color: var(--cm-muted);
-  user-select: none;
+}
+.cm-streaming-status__main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 .cm-streaming-status__spin {
   animation: cm-spin 0.9s linear infinite;
-  color: var(--cm-muted);
+  color: var(--cm-accent);
   flex-shrink: 0;
 }
 .cm-streaming-status--transport {
-  color: var(--cm-warning);
+  background: var(--cm-warning-bg);
 }
 .cm-streaming-status__transport-ico {
   color: var(--cm-warning);
   flex-shrink: 0;
 }
+.cm-streaming-status__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
 .cm-streaming-status__text {
-  /* Subtle fade-in when the phrase swaps. Re-keys via the seed change which
-     re-renders the span; CSS transition smooths the opacity but the text is
-     instant — good-enough animation without measuring text. */
+  color: var(--cm-fg);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition: opacity 0.18s ease;
 }
 .cm-streaming-status__elapsed {
   color: var(--cm-muted);
-  opacity: 0.7;
   font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-streaming-status__toggle {
+  appearance: none;
+  border: 1px solid var(--cm-line);
+  background: #fff;
+  color: var(--cm-muted);
+  border-radius: var(--cm-radius-pill);
+  padding: 3px 7px;
+  font: inherit;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.cm-streaming-status__toggle:hover {
+  border-color: var(--cm-gray-300);
+  color: var(--cm-fg-secondary);
+}
+.cm-streaming-status__toggle svg {
+  transition: transform 0.12s ease;
+}
+.cm-streaming-status__toggle.is-open svg {
+  transform: rotate(180deg);
+}
+.cm-streaming-status__events {
+  margin: 0;
+  padding: 7px 0 0 21px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--cm-fg-secondary);
+}
+.cm-streaming-status__event {
+  line-height: 1.35;
+  padding-left: 2px;
+}
+.cm-streaming-status__event time {
+  color: var(--cm-muted);
+  font-variant-numeric: tabular-nums;
+  margin-right: 7px;
+}
+.cm-streaming-status__event--warn {
+  color: var(--cm-warning);
+}
+.cm-streaming-status__event--error {
+  color: var(--cm-danger);
 }
 
 /* Warning / error note block in chat. */
@@ -2568,6 +2702,270 @@ body.cm-chat-resizing {
 .cm-input--host {
   width: 150px;
 }
+.cm-provider-manager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.cm-provider-manager__select {
+  width: 180px;
+}
+.cm-icon-btn {
+  appearance: none;
+  border: 1px solid var(--cm-gray-300);
+  background: var(--cm-surface);
+  color: var(--cm-fg-secondary);
+  cursor: pointer;
+  min-width: 32px;
+  height: 32px;
+  border-radius: var(--cm-radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0;
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.cm-icon-btn span {
+  font-size: 12px;
+  line-height: 1;
+}
+.cm-icon-btn:hover:not(:disabled) {
+  background: var(--cm-gray-100);
+  color: var(--cm-fg);
+}
+.cm-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.cm-provider-config {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.86fr) minmax(0, 1.35fr);
+  gap: 12px;
+  align-items: start;
+}
+.cm-provider-screen,
+.cm-provider-edit-page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cm-provider-list,
+.cm-provider-detail {
+  min-width: 0;
+}
+.cm-provider-list {
+  border: 1px solid var(--cm-line);
+  border-radius: var(--cm-radius-lg);
+  background: var(--cm-gray-50);
+  overflow: hidden;
+}
+.cm-provider-list__head {
+  min-height: 42px;
+  padding: 8px 10px 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--cm-divider);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cm-fg-secondary);
+}
+.cm-provider-list__items {
+  max-height: 360px;
+  overflow: auto;
+  padding: 6px;
+}
+.cm-provider-item {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: var(--cm-radius-md);
+  background: transparent;
+  color: var(--cm-fg);
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  grid-template-areas:
+    "main del"
+    "sub del"
+    "url del";
+  gap: 2px 8px;
+  padding: 9px 7px 9px 10px;
+  text-align: left;
+}
+.cm-provider-item:hover {
+  background: var(--cm-surface);
+}
+.cm-provider-item.is-active {
+  background: var(--cm-surface);
+  border-color: var(--cm-accent);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.12);
+}
+.cm-provider-item:focus-visible {
+  outline: none;
+  box-shadow: var(--cm-focus-ring);
+}
+.cm-provider-item__main {
+  grid-area: main;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.cm-provider-item__name,
+.cm-provider-item__meta,
+.cm-provider-item__sub,
+.cm-provider-item__url {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-provider-item__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cm-fg);
+}
+.cm-provider-item__meta {
+  flex: 1 1 auto;
+  font-size: 11px;
+  color: var(--cm-muted);
+}
+.cm-provider-item__sub {
+  grid-area: sub;
+  font-size: 11px;
+  color: var(--cm-fg-secondary);
+}
+.cm-provider-item__url {
+  grid-area: url;
+  font-size: 11px;
+  color: var(--cm-muted);
+  font-family: var(--cm-font-mono);
+}
+.cm-provider-item__delete {
+  grid-area: del;
+  align-self: center;
+  justify-self: end;
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--cm-muted);
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--cm-radius-sm);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.cm-provider-item__delete:hover:not(:disabled) {
+  background: var(--cm-danger-bg);
+  color: var(--cm-danger);
+}
+.cm-provider-item__delete:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.cm-provider-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cm-provider-detail__head {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.cm-provider-detail__eyebrow {
+  font-size: 11px;
+  color: var(--cm-muted);
+}
+.cm-provider-detail__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cm-fg);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-provider-detail__form {
+  margin-top: 0;
+}
+.cm-provider-edit-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+}
+.cm-provider-edit-head__title {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cm-provider-edit-head__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cm-back-btn {
+  appearance: none;
+  border: 1px solid var(--cm-gray-300);
+  background: var(--cm-surface);
+  color: var(--cm-fg-secondary);
+  cursor: pointer;
+  height: 30px;
+  border-radius: var(--cm-radius-sm);
+  padding: 0 10px 0 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.cm-back-btn:hover {
+  background: var(--cm-gray-100);
+  color: var(--cm-fg);
+}
+.cm-mini-action {
+  appearance: none;
+  border: 1px solid var(--cm-gray-300);
+  background: var(--cm-surface);
+  color: var(--cm-fg-secondary);
+  cursor: pointer;
+  height: 28px;
+  border-radius: var(--cm-radius-sm);
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.cm-mini-action:hover {
+  background: var(--cm-gray-100);
+  color: var(--cm-fg);
+}
+.cm-mini-action--danger:hover:not(:disabled) {
+  background: var(--cm-danger-bg);
+  border-color: rgba(220, 38, 38, 0.24);
+  color: var(--cm-danger);
+}
+.cm-mini-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
 /* A standalone action button inside a section (e.g. open log folder). */
 .cm-set-action {
   align-self: flex-start;
@@ -2652,8 +3050,40 @@ body.cm-chat-resizing {
 .cm-input {
   width: 180px;
 }
+.cm-input--wide {
+  width: 240px;
+}
 .cm-input--port {
   width: 96px;
+}
+.cm-secret {
+  position: relative;
+  width: 240px;
+}
+.cm-input--secret {
+  width: 100%;
+  padding-right: 36px;
+}
+.cm-secret__toggle {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--cm-muted);
+  cursor: pointer;
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--cm-radius-sm);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.cm-secret__toggle:hover {
+  background: var(--cm-gray-100);
+  color: var(--cm-fg-secondary);
 }
 .cm-input::placeholder {
   color: var(--cm-subtle);
@@ -3139,6 +3569,10 @@ body.cm-chat-resizing {
 }
 @media (max-width: 880px) {
   .cm-gdetail { grid-template-columns: 1fr; max-height: 100% }
+  .cm-provider-config { grid-template-columns: 1fr; }
+  .cm-provider-list__items { max-height: 220px; }
+  .cm-provider-edit-head { grid-template-columns: 1fr; }
+  .cm-provider-edit-head__actions { justify-content: flex-start; flex-wrap: wrap; }
 }
 .cm-gdetail__close {
   position: absolute;

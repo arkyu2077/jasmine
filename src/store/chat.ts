@@ -3,6 +3,8 @@ import type { CodexEvent, SessionMeta } from "../types";
 import { ipc, type ChatImageResolution } from "../lib/ipc";
 import { useBoardStore } from "./board";
 import { useSettingsStore } from "./settings";
+import { useLocaleStore } from "../i18n/locale";
+import { messages as i18nMessages, type MsgKey } from "../i18n/messages";
 import { InactivityWatchdog } from "../lib/watchdog";
 
 // ── runtime stability ───────────────────────────────────────────────────────
@@ -81,8 +83,11 @@ export type ChatBlock =
    *     has a placeholder at (x, y, w, h) but chat needs a visible "image
    *     coming…" indicator so the user knows what the agent is doing.
    *   • `done` — `imageGenerated` patched the matching block (by placementId)
-   *     with the final placement + caption. Renders the thumbnail link. */
-  | { type: "image"; placementId: string; caption?: string | null; status: "generating" | "done"; startedAt?: number }
+   *     with the final placement + caption. Renders the thumbnail link.
+   *   • `failed` — the turn settled (completed/error/restart) while the block
+   *     was still `generating`, i.e. `imageGenerated` never arrived. `settle()`
+   *     promotes it so the chat doesn't spin a "generating…" card forever. */
+  | { type: "image"; placementId: string; caption?: string | null; status: "generating" | "done" | "failed"; startedAt?: number }
   | { type: "note"; level: string; text: string };
 
 export interface PlanStep {
@@ -104,6 +109,25 @@ export interface RateLimit {
   reached?: string | null;
 }
 
+export type TurnMonitorEventKind =
+  | "submitted"
+  | "thinking"
+  | "tool"
+  | "image_start"
+  | "image_done"
+  | "reconnecting"
+  | "fallback"
+  | "warning"
+  | "error";
+
+export interface TurnMonitorEvent {
+  id: string;
+  at: number;
+  kind: TurnMonitorEventKind;
+  detail?: string | null;
+  level?: "info" | "warn" | "error";
+}
+
 export type ChatMessage =
   | { id: string; role: "user"; text: string; refs: string[] }
   | { id: string; role: "assistant"; blocks: ChatBlock[]; status: "streaming" | "done" | "error"; error?: string };
@@ -119,6 +143,9 @@ interface ChatState {
   turnStatus: TurnStatus;
   /** Recoverable Codex transport notices for the current turn. */
   transportStatus: TransportStatus | null;
+  turnStartedAt: number | null;
+  turnLastActivityAt: number | null;
+  turnMonitorEvents: TurnMonitorEvent[];
   messages: ChatMessage[];
   error: string | null;
   /** The agent's current plan/todo (turn/plan/updated). */
@@ -161,6 +188,7 @@ interface ChatState {
 }
 
 const newId = () => Math.random().toString(36).slice(2, 10);
+const MAX_TURN_MONITOR_EVENTS = 16;
 
 /** Immutably update the last assistant message (the streaming one). */
 function updateLast(
@@ -256,12 +284,8 @@ function forceRestartSession(
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.role === "assistant") {
-      const settled = settle(m);
-      const withNote: AsstMsg =
-        settled.blocks.length === 0
-          ? { ...settled, blocks: [{ type: "note", level: "error", text: reason }] }
-          : settled;
-      failedAsst = { ...withNote, status: "error", error: reason };
+      const settled = ensureNote(settle(m), "error", reason);
+      failedAsst = { ...settled, status: "error", error: reason };
       break;
     }
   }
@@ -296,13 +320,11 @@ function forceRestartSession(
   return {
     turnStatus: "idle",
     transportStatus: null,
+    turnStartedAt: null,
+    turnLastActivityAt: null,
     messages: updateLast(messages, (m) => {
-      const settled = settle(m);
-      const withNote =
-        settled.blocks.length === 0
-          ? { ...settled, blocks: [{ type: "note" as const, level: "error", text: reason }] }
-          : settled;
-      return { ...withNote, status: "error" as const, error: reason };
+      const settled = ensureNote(settle(m), "error", reason);
+      return { ...settled, status: "error" as const, error: reason };
     }),
   };
 }
@@ -331,12 +353,8 @@ function failLocalTurn(st: ChatState, reason: string, scope?: TurnScope): Partia
 
   const failedAsst = (() => {
     const m = messages[targetIndex] as AsstMsg;
-    const settled = settle(m);
-    const withNote =
-      settled.blocks.length === 0
-        ? { ...settled, blocks: [{ type: "note" as const, level: "error", text: reason }] }
-        : settled;
-    return { ...withNote, status: "error" as const, error: reason };
+    const settled = ensureNote(settle(m), "error", reason);
+    return { ...settled, status: "error" as const, error: reason };
   })();
   const nextMessages = messages.slice();
   nextMessages[targetIndex] = failedAsst;
@@ -351,6 +369,8 @@ function failLocalTurn(st: ChatState, reason: string, scope?: TurnScope): Partia
   return {
     turnStatus: isLatestAssistant ? "idle" : st.turnStatus,
     transportStatus: isLatestAssistant ? null : st.transportStatus,
+    turnStartedAt: isLatestAssistant ? null : st.turnStartedAt,
+    turnLastActivityAt: isLatestAssistant ? null : st.turnLastActivityAt,
     error: isLatestAssistant ? reason : st.error,
     messages: nextMessages,
   };
@@ -367,16 +387,62 @@ function shouldBreakRestartLoop(): boolean {
   return restartHistory.length > RESTART_LIMIT;
 }
 
-/** End-of-turn: stop spinners on any still-active block. */
+/** End-of-turn: stop spinners on any still-active block. An image block still
+ *  in `generating` means the turn ended before `imageGenerated` arrived (codex
+ *  emitted `generationStarted` but never the result — the common failure mode
+ *  on external Chat Completions providers, which can't drive image gen). Mark
+ *  it `failed` so the chat shows a settled "not generated" card instead of an
+ *  eternal spinner. */
 function settle(m: AsstMsg): AsstMsg {
   const blocks = m.blocks.map((b) =>
     b.type === "thinking" && b.active
       ? { ...b, active: false, durationMs: b.startedAt ? Date.now() - b.startedAt : b.durationMs }
       : b.type === "tool" && b.status === "running"
         ? { ...b, status: "done" as const }
-        : b
+        : b.type === "image" && b.status === "generating"
+          ? { ...b, status: "failed" as const }
+          : b
   );
   return { ...m, blocks };
+}
+
+/** Localised user-facing string, resolved outside React (the store has no
+ *  hook context). Used for terminal-outcome notes. */
+function terminalText(key: MsgKey): string {
+  return i18nMessages[useLocaleStore.getState().lang][key];
+}
+
+/** Did the assistant actually return anything the user can see? A turn that
+ *  settles with zero substance (no text, no finished image, no prior note) must
+ *  NOT just vanish the spinner — the caller appends an explanatory note. */
+function hasSubstance(m: AsstMsg): boolean {
+  return m.blocks.some(
+    (b) =>
+      (b.type === "text" && b.text.trim().length > 0) ||
+      (b.type === "image" && b.status === "done") ||
+      b.type === "note",
+  );
+}
+
+/** Append a terminal note unless the last block is already that exact note.
+ *  Guarantees the turn's outcome is visible in the chat even when the message
+ *  already has content (e.g. a preamble) — the old code only surfaced the error
+ *  when blocks were empty, so a failed turn after a preamble showed nothing. */
+function ensureNote(m: AsstMsg, level: string, text: string): AsstMsg {
+  const last = m.blocks[m.blocks.length - 1];
+  if (last && last.type === "note" && last.text === text) return m;
+  return { ...m, blocks: [...m.blocks, { type: "note", level, text }] };
+}
+
+/** Human reason for a non-completed turn. Prefer codex's own message; fall back
+ *  to a localised phrase keyed on the terminal status so the user never sees a
+ *  blank failure. */
+function turnFailureReason(status: string, error?: string | null): string {
+  if (status === "aborted" || status === "interrupted" || status === "cancelled") {
+    return terminalText("chat.turn.stopped");
+  }
+  const trimmed = error?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : terminalText("chat.turn.failed");
 }
 
 /** Before same-turn steering opens a new assistant target, close the previous
@@ -391,6 +457,42 @@ function closeOpenAssistant(messages: ChatMessage[]): ChatMessage[] {
     return next;
   }
   return messages;
+}
+
+function touchTurn(now = Date.now()): Pick<ChatState, "turnLastActivityAt"> {
+  return { turnLastActivityAt: now };
+}
+
+function appendTurnMonitorEvent(
+  st: ChatState,
+  event: Omit<TurnMonitorEvent, "id" | "at">,
+  opts: { activity?: boolean; now?: number } = {},
+): Pick<ChatState, "turnLastActivityAt" | "turnMonitorEvents"> {
+  const now = opts.now ?? Date.now();
+  const last = st.turnMonitorEvents[st.turnMonitorEvents.length - 1];
+  const nextEvent: TurnMonitorEvent = { ...event, id: newId(), at: now };
+  const sameAsLast =
+    last &&
+    last.kind === nextEvent.kind &&
+    last.detail === nextEvent.detail &&
+    last.level === nextEvent.level &&
+    now - last.at < 8_000;
+  const turnMonitorEvents = sameAsLast
+    ? [...st.turnMonitorEvents.slice(0, -1), { ...last, at: now }]
+    : [...st.turnMonitorEvents.slice(-(MAX_TURN_MONITOR_EVENTS - 1)), nextEvent];
+  return {
+    turnLastActivityAt: opts.activity === false ? st.turnLastActivityAt : now,
+    turnMonitorEvents,
+  };
+}
+
+function shouldHideRuntimeLogFromChat(message: string): boolean {
+  return message.includes("Skill descriptions were shortened") || message.includes("skills context budget");
+}
+
+function sessionsForCurrentProvider(doc: { sessions: SessionMeta[]; currentProviderKey?: string | null }) {
+  if (!doc.currentProviderKey) return doc.sessions;
+  return doc.sessions.filter((s) => s.providerKey === doc.currentProviderKey);
 }
 
 /** Monotonic counter used by `stopTurn` to invalidate its own orphan
@@ -437,6 +539,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sessionStatus: "idle",
   turnStatus: "idle",
   transportStatus: null,
+  turnStartedAt: null,
+  turnLastActivityAt: null,
+  turnMonitorEvents: [],
   messages: [],
   error: null,
   plan: null,
@@ -453,6 +558,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sessionStatus: "idle",
       turnStatus: "idle",
       transportStatus: null,
+      turnStartedAt: null,
+      turnLastActivityAt: null,
+      turnMonitorEvents: [],
       messages: [],
       error: null,
       plan: null,
@@ -465,11 +573,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setSessionStatus: (s, error) => set({ sessionStatus: s, error: error ?? null }),
 
   startTurn: (text, refs) => {
+    const now = Date.now();
     const userMsg: ChatMessage = { id: newId(), role: "user", text, refs };
     const asstMsg: ChatMessage = { id: newId(), role: "assistant", blocks: [], status: "streaming" };
     set((st) => ({
       turnStatus: "running",
       transportStatus: null,
+      turnStartedAt: now,
+      turnLastActivityAt: now,
+      turnMonitorEvents: [
+        {
+          id: newId(),
+          at: now,
+          kind: "submitted",
+          detail: refs.length ? String(refs.length) : null,
+          level: "info",
+        },
+      ],
       messages: [...(st.turnStatus === "running" ? closeOpenAssistant(st.messages) : st.messages), userMsg, asstMsg],
     }));
     // Arm the inactivity watchdog for this turn. Every subsequent runtime
@@ -537,21 +657,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // here AND, if terminal, call `watchdog.stop()` in the case body.
     if (PROGRESS_EVENT_KINDS.has(e.kind)) watchdog.touch();
     set((st) => {
+      const activity = PROGRESS_EVENT_KINDS.has(e.kind) ? touchTurn() : {};
       switch (e.kind) {
         case "sessionInit":
-          return { sessionStatus: "ready" };
+          return { ...activity, sessionStatus: "ready" };
         case "textDelta":
-          return { messages: updateLast(st.messages, (m) => appendText(m, e.text)) };
+          return { ...activity, messages: updateLast(st.messages, (m) => appendText(m, e.text)) };
         case "thinkingStart":
           return {
+            ...appendTurnMonitorEvent(st, { kind: "thinking", level: "info" }),
             messages: updateLast(st.messages, (m) =>
               pushBlock(m, { type: "thinking", text: "", active: true, startedAt: Date.now() })
             ),
           };
         case "thinkingDelta":
-          return { messages: updateLast(st.messages, (m) => appendThinking(m, e.text)) };
+          return { ...activity, messages: updateLast(st.messages, (m) => appendThinking(m, e.text)) };
         case "thinkingStop":
           return {
+            ...activity,
             messages: updateLast(st.messages, (m) =>
               patchLast(
                 m,
@@ -565,18 +688,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
           };
         case "toolStart":
           return {
+            ...appendTurnMonitorEvent(st, { kind: "tool", detail: e.toolName, level: "info" }),
             messages: updateLast(st.messages, (m) =>
               pushBlock(m, { type: "tool", id: e.toolUseId, name: e.toolName, status: "running", detail: e.detail ?? undefined })
             ),
           };
         case "toolStop":
           return {
+            ...activity,
             messages: updateLast(st.messages, (m) =>
               patchLast(m, (b) => b.type === "tool" && b.id === e.toolUseId, (b) => ({ ...b, status: "done" }))
             ),
           };
         case "permissionRequest":
           return {
+            ...appendTurnMonitorEvent(
+              st,
+              { kind: "warning", detail: e.summary || `request ${e.requestId}`, level: "warn" },
+              { activity: false },
+            ),
             messages: updateLast(st.messages, (m) =>
               pushBlock(m, {
                 type: "note",
@@ -591,6 +721,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // isn't enough — users with the chat panel focused need a signal here).
           // `imageGenerated` later finds and promotes this block by placementId.
           return {
+            ...appendTurnMonitorEvent(st, { kind: "image_start", level: "info" }),
             messages: updateLast(st.messages, (m) =>
               pushBlock(m, {
                 type: "image",
@@ -610,6 +741,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           // Fall back to push-new if no placeholder match: covers replays /
           // out-of-order delivery where generationStarted was lost.
           return {
+            ...appendTurnMonitorEvent(st, { kind: "image_done", level: "info" }),
             messages: updateLast(st.messages, (m) => {
               const idx = e.placeholderId
                 ? m.blocks.findIndex(
@@ -639,11 +771,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return {
             turnStatus: "idle",
             transportStatus: null,
-            messages: updateLast(st.messages, (m) => ({
-              ...settle(m),
-              status: e.status === "completed" ? "done" : "error",
-              error: e.error ?? undefined,
-            })),
+            turnStartedAt: null,
+            turnLastActivityAt: null,
+            messages: updateLast(st.messages, (m0) => {
+              const m = settle(m0);
+              if (e.status === "completed") {
+                // A clean completion that returned nothing visible would just
+                // vanish the spinner with no result — leave a note so the user
+                // always sees an outcome instead of an empty void.
+                const settled = hasSubstance(m) ? m : ensureNote(m, "warn", terminalText("chat.turn.empty"));
+                return { ...settled, status: "done" };
+              }
+              // Non-completed (aborted / interrupted / failed): surface a
+              // specific reason as a note so it's visible even when the message
+              // already has a preamble block.
+              const reason = turnFailureReason(e.status, e.error);
+              return { ...ensureNote(m, "error", reason), status: "error", error: reason };
+            }),
           };
         case "error":
           // Fatal runtime errors are distinct from recoverable Codex diagnostics
@@ -652,11 +796,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return {
             turnStatus: "idle",
             transportStatus: null,
+            turnStartedAt: null,
+            turnLastActivityAt: null,
             error: e.message,
-            messages: updateLast(st.messages, (m) => ({ ...settle(m), status: "error", error: e.message })),
+            messages: updateLast(st.messages, (m) => ({
+              ...ensureNote(settle(m), "error", e.message),
+              status: "error",
+              error: e.message,
+            })),
           };
         case "planUpdated":
-          return { plan: e.steps.length ? { explanation: e.explanation, steps: e.steps } : null };
+          return { ...activity, plan: e.steps.length ? { explanation: e.explanation, steps: e.steps } : null };
         case "rateLimits":
           return {
             rateLimit: {
@@ -669,23 +819,55 @@ export const useChatStore = create<ChatState>((set, get) => ({
           };
         case "transportStatus":
           if (st.turnStatus !== "running") return {};
-          return {
-            transportStatus:
-              e.phase === "reconnecting"
-                ? {
-                    phase: "reconnecting",
-                    attempt: e.attempt ?? null,
-                    max: e.max ?? null,
-                    message: e.message,
-                  }
-                : { phase: "fallback", message: e.message },
-          };
-        case "log":
-          // Surface warnings/errors as an inline note block in the stream.
-          if (st.turnStatus === "running" && (e.level === "warn" || e.level === "error")) {
-            return { messages: updateLast(st.messages, (m) => pushBlock(m, { type: "note", level: e.level, text: e.message })) };
+          {
+            const event = appendTurnMonitorEvent(
+              st,
+              {
+                kind: e.phase === "reconnecting" ? "reconnecting" : "fallback",
+                detail: e.phase === "reconnecting" && e.attempt && e.max ? `${e.attempt}/${e.max}` : e.message,
+                level: "warn",
+              },
+              { activity: false },
+            );
+            return {
+              ...event,
+              transportStatus:
+                e.phase === "reconnecting"
+                  ? {
+                      phase: "reconnecting",
+                      attempt: e.attempt ?? null,
+                      max: e.max ?? null,
+                      message: e.message,
+                    }
+                  : { phase: "fallback", message: e.message },
+            };
           }
-          return {};
+        case "log": {
+          const level = e.level === "error" ? "error" : e.level === "warn" ? "warn" : "info";
+          const monitor =
+            level === "info"
+              ? {}
+              : appendTurnMonitorEvent(
+                  st,
+                  {
+                    kind: level === "error" ? "error" : "warning",
+                    detail: shouldHideRuntimeLogFromChat(e.message) ? "runtime_notice" : e.message,
+                    level,
+                  },
+                  { activity: false },
+                );
+          if (
+            st.turnStatus === "running" &&
+            e.level === "error" &&
+            !shouldHideRuntimeLogFromChat(e.message)
+          ) {
+            return {
+              ...monitor,
+              messages: updateLast(st.messages, (m) => pushBlock(m, { type: "note", level: e.level, text: e.message })),
+            };
+          }
+          return monitor;
+        }
         case "sessionComplete": {
           watchdog.stop();
           // If the sidecar exits, remove the dead registry entry before any
@@ -740,19 +922,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const doc = await ipc.listSessions(boardId);
     if (useBoardStore.getState().boardId !== boardId) return;
     if (expectedRestartNonce !== undefined && useSettingsStore.getState().restartNonce !== expectedRestartNonce) return;
-    const active = doc.activeSessionId ?? doc.sessions[0]?.id ?? null;
+    const providerSessions = sessionsForCurrentProvider(doc);
+    const active =
+      providerSessions.find((s) => s.id === doc.activeSessionId)?.id ?? providerSessions[0]?.id ?? null;
     let messages: ChatMessage[] = [];
     if (active) messages = (await ipc.loadSession(boardId, active)) as ChatMessage[];
     if (useBoardStore.getState().boardId !== boardId) return;
     if (expectedRestartNonce !== undefined && useSettingsStore.getState().restartNonce !== expectedRestartNonce) return;
-    set({ sessions: doc.sessions, activeSessionId: active, messages });
+    set({ sessions: providerSessions, activeSessionId: active, messages });
   },
 
   refreshSessions: async () => {
     const boardId = useBoardStore.getState().boardId;
     if (!boardId) return;
     const doc = await ipc.listSessions(boardId);
-    set((st) => ({ sessions: doc.sessions, activeSessionId: doc.activeSessionId ?? st.activeSessionId }));
+    const providerSessions = sessionsForCurrentProvider(doc);
+    set((st) => ({
+      sessions: providerSessions,
+      activeSessionId:
+        providerSessions.find((s) => s.id === doc.activeSessionId)?.id ??
+        providerSessions.find((s) => s.id === st.activeSessionId)?.id ??
+        providerSessions[0]?.id ??
+        null,
+    }));
   },
 
   newSession: async () => {

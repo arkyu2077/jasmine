@@ -14,6 +14,7 @@
 
 use crate::board::{self, BoardRegistry};
 use crate::prompt;
+use crate::provider::RuntimeProviderIdentity;
 use crate::runtime::{CodexEventEnvelope, PlanStep, UnifiedEvent, CODEX_EVENT};
 use crate::session;
 use crate::{assets, storage};
@@ -189,7 +190,7 @@ fn detect_shell_path() -> Option<String> {
     CACHED
         .get_or_init(|| {
             let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-            let marker = format!("__CAMEO_PATH_{}__", std::process::id());
+            let marker = format!("__JASMINE_PATH_{}__", std::process::id());
             let script = format!("echo \"{marker}${{PATH}}{marker}\"");
             let mut cmd = std::process::Command::new(shell);
             crate::process::hide_console_window(&mut cmd);
@@ -332,6 +333,8 @@ pub struct CodexSessionInner {
     registry: Arc<BoardRegistry>,
     board_id: String,
     folder: PathBuf,
+    provider_identity: RuntimeProviderIdentity,
+    external_provider_name: Option<String>,
     stdin: TokioMutex<ChildStdin>,
     pending: Pending,
     next_id: AtomicU64,
@@ -371,6 +374,7 @@ pub struct CodexSession {
     pub inner: Arc<CodexSessionInner>,
     child: TokioMutex<Child>,
     pid: u32,
+    _provider_adapter: Option<crate::provider_adapter::ProviderAdapterGuard>,
 }
 
 #[derive(Default)]
@@ -480,6 +484,7 @@ fn is_stale_thread(err: &str) -> bool {
     e.contains("no rollout found")
         || e.contains("thread not found")
         || e.contains("conversation not found")
+        || (e.contains("model provider") && e.contains("not found"))
 }
 
 async fn discard_session(
@@ -558,16 +563,35 @@ pub async fn start_session(
     codex_reg: Arc<CodexRegistry>,
     board_id: String,
 ) -> Result<String, String> {
+    let app_config = crate::config::load();
+    let provider_identity = app_config.provider.runtime_identity();
     if let Some(existing) = codex_reg.get(&board_id) {
         let thread_id = existing.inner.thread_id.lock().clone();
-        if !thread_id.is_empty() {
+        if !thread_id.is_empty() && existing.inner.provider_identity.key == provider_identity.key {
             return Ok(thread_id);
         }
-        tracing::warn!(module = "codex", board = %board_id, "discarding uninitialized codex session");
+        if existing.inner.provider_identity.key != provider_identity.key {
+            tracing::info!(
+                module = "codex",
+                board = %board_id,
+                old_provider = %existing.inner.provider_identity.key,
+                new_provider = %provider_identity.key,
+                "discarding codex session after provider switch"
+            );
+        } else {
+            tracing::warn!(module = "codex", board = %board_id, "discarding uninitialized codex session");
+        }
         discard_session(&codex_reg, &board_id, &existing).await;
     }
     let folder = board_reg.folder(&board_id).ok_or("unknown board")?;
     let codex = resolve_codex()?;
+    tracing::info!(
+        module = "codex",
+        board = %board_id,
+        path = %codex.path.display(),
+        folder = %folder.display(),
+        "starting codex app-server"
+    );
 
     let mut cmd = tokio::process::Command::new(&codex.path);
     crate::process::hide_tokio_console_window(&mut cmd);
@@ -583,10 +607,15 @@ pub async fn start_session(
         // Own process group → tree-kill can take down the whole model/tool tree.
         cmd.process_group(0);
     }
-    // Inject the user-configured network proxy into the sidecar env. Config is
-    // re-read per spawn, so a Settings change applies on the next session start
-    // (the frontend restarts the active session on save).
-    crate::proxy::apply_to_subprocess(&mut cmd, Some(&crate::config::load().proxy));
+    // Inject user-configured runtime settings. Config is re-read per spawn, so
+    // Settings changes apply on the next session start (the frontend restarts
+    // the active session on save).
+    let external_provider_name = provider_identity
+        .is_external()
+        .then(|| provider_identity.name.clone());
+    let provider_adapter =
+        crate::provider::apply_to_subprocess(&mut cmd, &app_config.provider).await?;
+    crate::proxy::apply_to_subprocess(&mut cmd, Some(&app_config.proxy));
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("spawn codex app-server: {e}"))?;
@@ -612,6 +641,8 @@ pub async fn start_session(
         registry: board_reg,
         board_id: board_id.clone(),
         folder: folder.clone(),
+        provider_identity: provider_identity.clone(),
+        external_provider_name,
         stdin: TokioMutex::new(stdin),
         pending: PlMutex::new(HashMap::new()),
         next_id: AtomicU64::new(1),
@@ -636,6 +667,7 @@ pub async fn start_session(
         inner: inner.clone(),
         child: TokioMutex::new(child),
         pid,
+        _provider_adapter: provider_adapter,
     });
 
     codex_reg.insert(board_id.clone(), session.clone());
@@ -645,13 +677,14 @@ pub async fn start_session(
         .call(
             "initialize",
             json!({
-                "clientInfo": { "name": "Cameo", "title": null, "version": env!("CARGO_PKG_VERSION") },
+                "clientInfo": { "name": "Jasmine", "title": null, "version": env!("CARGO_PKG_VERSION") },
                 "capabilities": null
             }),
             15_000,
         )
         .await
     {
+        tracing::warn!(module = "codex", board = %board_id, "initialize failed: {e}");
         discard_session(&codex_reg, &board_id, &session).await;
         return Err(e);
     }
@@ -659,7 +692,12 @@ pub async fn start_session(
 
     // Resume (or migrate from legacy meta.threadId) the ACTIVE session's thread.
     let legacy = storage::load_meta(&folder).thread_id.clone();
-    let sessions = session::ensure_initial(&folder, legacy);
+    let sessions = session::ensure_active_for_provider(
+        &folder,
+        legacy,
+        &provider_identity,
+        &provider_identity.name,
+    );
     let active = sessions.active_session_id.clone().unwrap_or_default();
     let prev = sessions
         .sessions
@@ -667,9 +705,10 @@ pub async fn start_session(
         .find(|s| s.id == active)
         .and_then(|s| s.thread_id.clone());
 
-    let thread_id = match ensure_thread(&inner, &folder, &active, prev).await {
+    let thread_id = match ensure_thread(&inner, &folder, &active, prev, &provider_identity).await {
         Ok(thread_id) => thread_id,
         Err(e) => {
+            tracing::warn!(module = "codex", board = %board_id, session = %active, "thread start/resume failed: {e}");
             discard_session(&codex_reg, &board_id, &session).await;
             return Err(e);
         }
@@ -697,6 +736,7 @@ async fn ensure_thread(
     folder: &Path,
     session_id: &str,
     prev: Option<String>,
+    provider: &RuntimeProviderIdentity,
 ) -> Result<String, String> {
     let dev = prompt::build_developer_instructions();
     let (approval, sandbox) = ("never", "workspace-write");
@@ -727,7 +767,7 @@ async fn ensure_thread(
             .await?;
         thread_id_of(&res).ok_or("thread/start: no thread id")?
     };
-    session::set_thread(folder, session_id, &id);
+    session::set_thread_and_provider(folder, session_id, &id, Some(provider));
     Ok(id)
 }
 
@@ -742,8 +782,8 @@ pub async fn new_session(
         return Err("Cannot create a new session while Codex is working.".into());
     }
     let folder = inner.folder.clone();
-    let meta = session::new_session(&folder);
-    let thread_id = ensure_thread(inner, &folder, &meta.id, None).await?;
+    let meta = session::new_session_with_provider(&folder, &inner.provider_identity);
+    let thread_id = ensure_thread(inner, &folder, &meta.id, None, &inner.provider_identity).await?;
     *inner.active_session_id.lock() = meta.id.clone();
     *inner.thread_id.lock() = thread_id;
     let mut m = storage::load_meta(&folder);
@@ -764,8 +804,21 @@ pub async fn switch_session(
         return Err("Cannot switch sessions while Codex is working.".into());
     }
     let folder = inner.folder.clone();
+    let doc = session::load(&folder);
+    let target = doc
+        .sessions
+        .iter()
+        .find(|s| s.id == session_id)
+        .ok_or("unknown session")?;
+    if !session::provider_matches(target, &inner.provider_identity) {
+        return Err(format!(
+            "Session belongs to another provider. Current provider is {}.",
+            inner.provider_identity.name
+        ));
+    }
     let prev = session::thread_of(&folder, &session_id);
-    let thread_id = ensure_thread(inner, &folder, &session_id, prev).await?;
+    let thread_id =
+        ensure_thread(inner, &folder, &session_id, prev, &inner.provider_identity).await?;
     session::set_active(&folder, &session_id);
     *inner.active_session_id.lock() = session_id.clone();
     *inner.thread_id.lock() = thread_id;
@@ -1090,6 +1143,12 @@ pub async fn respond_permission(
 /// Probe ChatGPT-subscription auth. Returns (authMethod, requiresLogin).
 pub async fn auth_status(codex_reg: Arc<CodexRegistry>, board_id: String) -> Result<Value, String> {
     let session = codex_reg.get(&board_id).ok_or("no session")?;
+    if session.inner.external_provider_name.is_some() {
+        return Ok(json!({
+            "authMethod": "external_provider",
+            "requiresLogin": false,
+        }));
+    }
     let res = session
         .inner
         .call("getAuthStatus", json!({}), 10_000)
@@ -1233,26 +1292,6 @@ async fn reader_loop(inner: Arc<CodexSessionInner>, stdout: ChildStdout) {
     }
 }
 
-/// Codex stderr lines whose lowercased text contains one of these substrings are
-/// surfaced to the UI as a chat note so failures aren't silent (first match
-/// wins). The full line is always written to the unified log regardless.
-const STDERR_SURFACE: &[(&str, &str, &str)] = &[
-    ("401", "warn", "认证失败 (401) — 确认已 codex login"),
-    ("403", "warn", "无权限 (403)"),
-    ("unauthorized", "warn", "认证失败 — 确认已 codex login"),
-    (
-        "error sending request",
-        "error",
-        "网络请求失败 — 检查网络/代理",
-    ),
-    ("connection refused", "error", "连接被拒绝 — 检查网络/代理"),
-    ("connection reset", "error", "连接被重置 — 检查网络/代理"),
-    ("timed out", "error", "请求超时 — 检查网络/代理"),
-    ("dns error", "error", "DNS 解析失败 — 检查网络/代理"),
-    ("rate limit", "warn", "触发限流 (rate limit)"),
-    ("transport error", "error", "传输层错误 — 检查网络/代理"),
-];
-
 async fn stderr_drain(inner: Arc<CodexSessionInner>, stderr: tokio::process::ChildStderr) {
     let mut lines = BufReader::new(stderr).lines();
     while let Ok(Some(line)) = lines.next_line().await {
@@ -1262,11 +1301,11 @@ async fn stderr_drain(inner: Arc<CodexSessionInner>, stderr: tokio::process::Chi
         }
         // Always captured in the unified log at info so it's visible by default.
         tracing::info!(module = "codex-stderr", "{text}");
-        let low = text.to_lowercase();
-        if let Some((_, level, prefix)) =
-            STDERR_SURFACE.iter().find(|(sub, _, _)| low.contains(sub))
+        if let Some((level, prefix)) =
+            stderr_surface(&text, inner.external_provider_name.as_deref())
         {
             let detail: String = text.chars().take(200).collect();
+            let detail = sanitize_adapter_url(&detail);
             emit_runtime_log(&inner, level, format!("{prefix}: {detail}"));
         }
     }
@@ -1346,6 +1385,148 @@ fn codex_notice_message(params: &Value) -> Option<String> {
         Value::Array(arr) if arr.is_empty() => None,
         _ => Some(compact_json(fallback, 500)),
     }
+}
+
+fn provider_auth_message(provider: &str, status: Option<&str>) -> String {
+    match status {
+        Some("403") => {
+            format!("外置 Provider 无权限 (403) — 检查 {provider} 的账户、额度或模型权限")
+        }
+        _ => format!("外置 Provider 认证失败 (401) — 检查 {provider} 的 API Key"),
+    }
+}
+
+fn local_auth_message(status: Option<&str>) -> &'static str {
+    match status {
+        Some("403") => "无权限 (403)",
+        Some("401") => "认证失败 (401) — 确认已 codex login",
+        _ => "认证失败 — 确认已 codex login",
+    }
+}
+
+fn provider_network_message(provider: &str, kind: &str) -> String {
+    match kind {
+        "timeout" => format!("外置 Provider 请求超时 — 检查 {provider} 的 Base URL 或代理"),
+        "dns" => format!("外置 Provider DNS 解析失败 — 检查 {provider} 的 Base URL 或代理"),
+        "refused" => format!("外置 Provider 连接被拒绝 — 检查 {provider} 的 Base URL 或代理"),
+        "reset" => format!("外置 Provider 连接被重置 — 检查 {provider} 的网络/代理"),
+        "rate_limit" => format!("外置 Provider 触发限流 — 检查 {provider} 的额度或模型限制"),
+        _ => format!("外置 Provider 请求失败 — 检查 {provider} 的 Base URL、API Key 或代理"),
+    }
+}
+
+fn contextual_runtime_message(external_provider: Option<&str>, message: &str) -> String {
+    let Some(provider) = external_provider else {
+        return message.to_string();
+    };
+    let low = message.to_ascii_lowercase();
+    let prefix =
+        if low.contains("401") || low.contains("unauthorized") || low.contains("invalid token") {
+            Some(provider_auth_message(provider, Some("401")))
+        } else if low.contains("403") {
+            Some(provider_auth_message(provider, Some("403")))
+        } else if low.contains("rate limit") {
+            Some(provider_network_message(provider, "rate_limit"))
+        } else if low.contains("timed out") {
+            Some(provider_network_message(provider, "timeout"))
+        } else if low.contains("dns error") {
+            Some(provider_network_message(provider, "dns"))
+        } else if low.contains("connection refused") {
+            Some(provider_network_message(provider, "refused"))
+        } else if low.contains("connection reset") {
+            Some(provider_network_message(provider, "reset"))
+        } else if low.contains("error sending request") || low.contains("transport error") {
+            Some(provider_network_message(provider, "request"))
+        } else {
+            None
+        };
+
+    match prefix {
+        Some(prefix) => format!("{prefix}: {}", sanitize_adapter_url(message)),
+        None => message.to_string(),
+    }
+}
+
+fn sanitize_adapter_url(message: &str) -> String {
+    // The loopback URL is an implementation detail of the local protocol
+    // adapter. Exposing it makes provider failures look like local-Codex
+    // failures, so replace it in user-facing diagnostics only.
+    regex::Regex::new(r"http://127\.0\.0\.1:\d+/v1/[A-Za-z0-9_./?=&%-]*")
+        .ok()
+        .map(|re| {
+            re.replace_all(message, "external provider endpoint")
+                .into_owned()
+        })
+        .unwrap_or_else(|| message.to_string())
+}
+
+fn stderr_surface(
+    level_line: &str,
+    external_provider: Option<&str>,
+) -> Option<(&'static str, String)> {
+    let low = level_line.to_ascii_lowercase();
+    if low.contains("401") {
+        return Some((
+            "warn",
+            external_provider
+                .map(|p| provider_auth_message(p, Some("401")))
+                .unwrap_or_else(|| local_auth_message(Some("401")).to_string()),
+        ));
+    }
+    if low.contains("403") {
+        return Some((
+            "warn",
+            external_provider
+                .map(|p| provider_auth_message(p, Some("403")))
+                .unwrap_or_else(|| local_auth_message(Some("403")).to_string()),
+        ));
+    }
+    if low.contains("unauthorized") {
+        return Some((
+            "warn",
+            external_provider
+                .map(|p| provider_auth_message(p, Some("401")))
+                .unwrap_or_else(|| local_auth_message(None).to_string()),
+        ));
+    }
+
+    for (needle, level, local, provider_kind) in [
+        (
+            "error sending request",
+            "error",
+            "网络请求失败 — 检查网络/代理",
+            "request",
+        ),
+        (
+            "connection refused",
+            "error",
+            "连接被拒绝 — 检查网络/代理",
+            "refused",
+        ),
+        (
+            "connection reset",
+            "error",
+            "连接被重置 — 检查网络/代理",
+            "reset",
+        ),
+        ("timed out", "error", "请求超时 — 检查网络/代理", "timeout"),
+        ("dns error", "error", "DNS 解析失败 — 检查网络/代理", "dns"),
+        ("rate limit", "warn", "触发限流 (rate limit)", "rate_limit"),
+        (
+            "transport error",
+            "error",
+            "传输层错误 — 检查网络/代理",
+            "request",
+        ),
+    ] {
+        if low.contains(needle) {
+            let prefix = external_provider
+                .map(|p| provider_network_message(p, provider_kind))
+                .unwrap_or_else(|| local.to_string());
+            return Some((level, prefix));
+        }
+    }
+    None
 }
 
 fn parse_u64_prefix(s: &str) -> Option<u64> {
@@ -1499,7 +1680,8 @@ async fn handle_notification(inner: &Arc<CodexSessionInner>, method: &str, param
                 ("completed", _) => None,
                 (_, Some(m)) => Some(m),
                 (s, None) => Some(format!("turn ended without success (status: {s})")),
-            };
+            }
+            .map(|m| contextual_runtime_message(inner.external_provider_name.as_deref(), &m));
             if status == "completed" {
                 tracing::info!(module = "codex", "turn completed");
             } else {
@@ -1598,6 +1780,7 @@ async fn handle_notification(inner: &Arc<CodexSessionInner>, method: &str, param
             let raw = compact_json(&params, 1200);
             let active_turn = *inner.turn_in_flight.lock();
             if let Some(msg) = codex_notice_message(&params) {
+                let msg = contextual_runtime_message(inner.external_provider_name.as_deref(), &msg);
                 tracing::warn!(
                     module = "codex",
                     active_turn,
@@ -1611,6 +1794,14 @@ async fn handle_notification(inner: &Arc<CodexSessionInner>, method: &str, param
                     active_turn,
                     params = %raw,
                     "codex error notification without message kept non-terminal"
+                );
+                // Never swallow it entirely: surface a generic notice so the
+                // turn monitor shows that *something* went wrong rather than
+                // leaving the user staring at a silent spinner.
+                emit_runtime_log(
+                    inner,
+                    "warn",
+                    "The model provider reported a problem (no detail provided).".to_string(),
                 );
             }
         }
@@ -1735,7 +1926,7 @@ fn tool_detail(typ: &str, item: &Value) -> Option<String> {
     }
 }
 
-/// The core Cameo handler: take a generated image (savedPath or base64),
+/// The core Jasmine handler: take a generated image (savedPath or base64),
 /// import it into the Board folder, mint an Asset, place it right-of-source,
 /// persist, and emit `ImageGenerated`.
 /// Claim a layout slot + loading placeholder when a generation starts, so the
@@ -1917,6 +2108,36 @@ mod tests {
     }
 
     #[test]
+    fn external_provider_errors_do_not_point_to_codex_login() {
+        let message = "unexpected status 401 Unauthorized: Invalid token, url: http://127.0.0.1:49205/v1/responses";
+
+        let surfaced = contextual_runtime_message(Some("modelsrouter"), message);
+
+        assert!(surfaced.contains("外置 Provider 认证失败"));
+        assert!(surfaced.contains("modelsrouter"));
+        assert!(surfaced.contains("external provider endpoint"));
+        assert!(!surfaced.contains("codex login"));
+        assert!(!surfaced.contains("127.0.0.1"));
+    }
+
+    #[test]
+    fn local_auth_errors_still_point_to_codex_login() {
+        let (_, prefix) = stderr_surface("unexpected status 401 Unauthorized", None).unwrap();
+
+        assert!(prefix.contains("codex login"));
+    }
+
+    #[test]
+    fn external_stderr_auth_errors_point_to_provider_key() {
+        let (_, prefix) =
+            stderr_surface("unexpected status 401 Unauthorized", Some("modelsrouter")).unwrap();
+
+        assert!(prefix.contains("modelsrouter"));
+        assert!(prefix.contains("API Key"));
+        assert!(!prefix.contains("codex login"));
+    }
+
+    #[test]
     fn turn_steer_params_include_expected_turn_precondition() {
         let params = turn_steer_params(
             "thread-1",
@@ -1946,7 +2167,7 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn extract_marked_path_ignores_noisy_shell_output() {
-        let marker = "__CAMEO_PATH_TEST__";
+        let marker = "__JASMINE_PATH_TEST__";
         let stdout = format!("banner\n{marker}/nvm/bin:/usr/local/bin:/usr/bin{marker}\n");
         assert_eq!(
             extract_marked_path(&stdout, marker).as_deref(),
