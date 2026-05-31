@@ -25,4 +25,12 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Node-side dev scripts (e.g. the git-hook installer) run under Node, not
+    // the browser — give them Node globals so `console`/`process` aren't flagged.
+    files: ["scripts/**/*.{js,mjs}"],
+    languageOptions: {
+      globals: { console: "readonly", process: "readonly", fetch: "readonly" },
+    },
+  },
 );

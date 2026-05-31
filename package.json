@@ -1,5 +1,5 @@
 {
-  "name": "cameo",
+  "name": "jasmine",
   "private": true,
   "version": "0.1.5",
   "description": "An image-first canvas for your local Codex agent.",
@@ -18,8 +18,11 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",
+    "test:rust": "cargo test --lib --manifest-path src-tauri/Cargo.toml",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm test:rust",
+    "prepare": "node scripts/setup-hooks.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

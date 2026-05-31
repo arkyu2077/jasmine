@@ -1,0 +1,10 @@
+#!/bin/sh
+# Jasmine pre-commit gate — fast checks only (type + lint).
+# Heavier test suites run on push (see .githooks/pre-push).
+# Bypass in an emergency with: git commit --no-verify
+set -e
+
+echo "▶ pre-commit: typecheck + lint"
+pnpm -s typecheck
+pnpm -s lint
+echo "✓ pre-commit passed"

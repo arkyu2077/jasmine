@@ -1,0 +1,12 @@
+#!/bin/sh
+# Jasmine pre-push gate — the full verification suite before code leaves the
+# machine: frontend unit tests + Rust unit tests. Bypass with: git push --no-verify
+set -e
+
+echo "▶ pre-push: frontend tests (vitest)"
+pnpm -s test
+
+echo "▶ pre-push: rust tests (cargo test --lib)"
+cargo test --lib --manifest-path src-tauri/Cargo.toml
+
+echo "✓ pre-push passed"
