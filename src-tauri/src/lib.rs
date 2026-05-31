@@ -54,8 +54,8 @@ pub fn run() {
         .manage(codex_reg)
         .setup(|app| {
             // Auto-update is disabled until a Jasmine-owned update server is
-            // configured (the old https://r.cameo.ink endpoint was removed).
-            // To re-enable: restore the `updater` block in tauri.conf.json and
+            // configured (no `updater` endpoint in tauri.conf.json). To
+            // re-enable: restore the `updater` block in tauri.conf.json and
             // re-add the startup check spawn (updater::check_update_on_startup).
             tray::setup(app)?;
             Ok(())

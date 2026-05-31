@@ -164,7 +164,7 @@ Jasmine 是一个**桌面 app**（Tauri 2 + React + PixiJS），把 OpenAI 的 *
 | `logging.rs` | 56 | `tracing` 双 sink：stderr + 日滚文件（`~/.jasmine/logs/jasmine.YYYY-MM-DD.log`，保留 14 天）。Rust / 前端 `front_log` / Codex stderr 全部带 `module=` 标签汇在一处 |
 | `device.rs` | 94 | 匿名 device id（UUID v4 持久化到 `~/.jasmine/device_id`），cloud telemetry 的锚 |
 | `tray.rs` | 68 | 系统托盘图标 + 菜单。关窗口默认隐藏到托盘（设置可关）；macOS dock reopen 处理 |
-| `updater.rs` | 422 | Tauri updater plugin：启动 60s 延迟探一次 `r.cameo.ink/update/`；签名校验由 plugin + `tauri.conf.json` 的 pubkey 做 |
+| `updater.rs` | 505 | Tauri updater plugin。**当前禁用**：无 Jasmine 自有更新服务器，已移除 `tauri.conf.json` 的 updater endpoint + 启动检查。代码机制保留，待接入自有更新服务器后恢复 |
 
 ### 4.2 关键不变量
 
@@ -408,12 +408,11 @@ TS 侧镜像于 `src/types.ts::CodexEvent`（serde camelCase wire form）。
 - **macOS**：`APPLE_SIGNING_IDENTITY` + 公证凭据齐了 → Tauri 自动签 + 公证；缺省走 ad-hoc
   （本机能跑，他机被 Gatekeeper 拦）。
 - **Windows**：走 `tauri.conf.json` 的 `bundle.windows.certificateThumbprint`，缺省不签。
-- **Updater 签名**：`TAURI_SIGNING_PRIVATE_KEY` ed25519，pubkey 嵌在 `tauri.conf.json` 的
-  updater 段，下发的 `darwin-*` / `windows-*` updater manifest 带签名，installer 端校验。
-- **下载源分工**：R2 `https://r.cameo.ink` 是官网 `latest*.json`、官网安装包下载和 app updater 的
-  canonical source；GitHub Release 只保留一份安装包镜像给开源访问者手动下载。
-- **发布后验证**：`publish_release.*` 上传 R2 后会可选使用 `CF_ZONE_ID` / `CF_API_TOKEN` 清 CDN
-  缓存，并对刚上传的 `r.cameo.ink` URL 做 HEAD 验证。
+- **Updater**：**当前禁用**——无自有更新服务器，`tauri.conf.json` 无 updater endpoint，
+  启动也不做检查。`updater.rs` 机制保留，待接入自有更新服务器（含 ed25519 签名）后恢复。
+- **发布**：`publish_release.sh` / `.ps1` 现在只把安装包（macOS `.dmg` / Windows `-setup.exe`）
+  通过 `gh` CLI 发到 **GitHub Releases**；无 R2/CDN 上传、无 updater manifest。等有了自有
+  域名/托管再恢复 R2 + manifest 那套（见 git 历史）。
 
 ### 9.4 跨端不能交叉
 

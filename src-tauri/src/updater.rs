@@ -1,8 +1,8 @@
 //! Auto-updater for the Jasmine desktop client.
 //!
 //! NOTE: currently DISABLED — the startup check is not wired (see lib.rs) and
-//! `tauri.conf.json` has no `updater` endpoint, because the previous update
-//! server (https://r.cameo.ink) is gone. The machinery below is kept intact;
+//! `tauri.conf.json` has no `updater` endpoint, because there is no
+//! Jasmine-owned update server yet. The machinery below is kept intact;
 //! re-enable by setting a Jasmine-owned `<update-server>` endpoint + pubkey in
 //! tauri.conf.json and restoring the startup-check spawn in lib.rs.
 //!
