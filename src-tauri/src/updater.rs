@@ -1,8 +1,14 @@
 //! Auto-updater for the Jasmine desktop client.
 //!
+//! NOTE: currently DISABLED — the startup check is not wired (see lib.rs) and
+//! `tauri.conf.json` has no `updater` endpoint, because the previous update
+//! server (https://r.cameo.ink) is gone. The machinery below is kept intact;
+//! re-enable by setting a Jasmine-owned `<update-server>` endpoint + pubkey in
+//! tauri.conf.json and restoring the startup-check spawn in lib.rs.
+//!
 //! Background flow (silent download, on-demand install):
 //!   1. App boot + 60s delay → check the platform-specific manifest at
-//!      `https://r.cameo.ink/update/<target>-<arch>.json`.
+//!      `<update-server>/update/<target>-<arch>.json`.
 //!   2. If a newer version is published, the binary is downloaded silently —
 //!      the user sees no banner, no modal, nothing.
 //!   3. Download completes → frontend gets `updater:ready-to-restart` event →

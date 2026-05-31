@@ -53,12 +53,10 @@ pub fn run() {
         .manage(boards)
         .manage(codex_reg)
         .setup(|app| {
-            // Fire-and-forget background update check (60s delayed inside).
-            // Errors are swallowed in the worker — updater never blocks boot.
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                updater::check_update_on_startup(handle).await;
-            });
+            // Auto-update is disabled until a Jasmine-owned update server is
+            // configured (the old https://r.cameo.ink endpoint was removed).
+            // To re-enable: restore the `updater` block in tauri.conf.json and
+            // re-add the startup check spawn (updater::check_update_on_startup).
             tray::setup(app)?;
             Ok(())
         })

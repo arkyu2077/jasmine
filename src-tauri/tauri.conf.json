@@ -34,7 +34,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -53,12 +53,5 @@
       }
     }
   },
-  "plugins": {
-    "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ3QkFFQzI0QzZFODk0RkEKUldUNmxPakdKT3k2UjhVQURTWDgxVmFTRGVHaVVtLzRlZFBIWUZKS0dsYmtzakZMbU5mdFFmaCsK",
-      "endpoints": [
-        "https://r.cameo.ink/update/{{target}}-{{arch}}.json"
-      ]
-    }
-  }
+  "plugins": {}
 }
