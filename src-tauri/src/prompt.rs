@@ -25,7 +25,7 @@ The working directory is the user's Board folder. It contains the image files th
     // ── Workspace usage ──
     let workspace = r#"Workspace usage:
 - Do all file work inside the working directory.
-- Do not read, write, or modify anything under the .jasmine/ or legacy .cameo/ subdirectories — that is Jasmine's private state.
+- Do not read, write, or modify anything under the .jasmine/ subdirectory — that is Jasmine's private state.
 - Keep responses concise; the user is watching results appear on a canvas, not reading long prose."#;
 
     format!("{product}\n\n{principles}\n\n{workspace}")

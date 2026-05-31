@@ -104,7 +104,7 @@ export const ipc = {
     invoke<void>("respond_permission", { boardId, requestId, accept }),
   stopSession: (boardId: string) => invoke<void>("stop_session", { boardId }),
 
-  // App config (global ~/.jasmine/config.json, legacy ~/.cameo supported) + diagnostics
+  // App config (global ~/.jasmine/config.json) + diagnostics
   cfgLoad: () => invoke<AppConfig>("cfg_load"),
   cfgSave: (config: AppConfig) => invoke<void>("cfg_save", { config }),
   probeProxy: (protocol: ProxySettings["protocol"], host: string, port: number) =>

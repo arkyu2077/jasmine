@@ -39,9 +39,7 @@ fn with_doc_save<T>(
 /// recent workspace → else create a fresh default workspace.
 #[tauri::command]
 pub fn initial_board() -> Option<String> {
-    if let Ok(p) =
-        std::env::var("JASMINE_OPEN_BOARD").or_else(|_| std::env::var("CAMEO_OPEN_BOARD"))
-    {
+    if let Ok(p) = std::env::var("JASMINE_OPEN_BOARD") {
         if std::path::Path::new(&p).is_dir() {
             return Some(p);
         }
@@ -105,7 +103,6 @@ pub fn remove_workspace(id: String) -> Result<(), String> {
 #[tauri::command]
 pub fn initial_test_prompt() -> Option<String> {
     std::env::var("JASMINE_TEST_PROMPT")
-        .or_else(|_| std::env::var("CAMEO_TEST_PROMPT"))
         .ok()
         .filter(|s| !s.is_empty())
 }

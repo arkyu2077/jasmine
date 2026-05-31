@@ -4,17 +4,16 @@
 //!
 //! 1. **Global app dir** `~/.jasmine/` — app-level state that is NOT tied to any
 //!    one Board: logs, the recent-Boards index, app settings. Overridable with
-//!    `JASMINE_HOME` (tests / portable installs). Existing `~/.cameo/` installs
-//!    continue to be read for compatibility.
+//!    `JASMINE_HOME` (tests / portable installs).
 //!
 //! 2. **Per-Board sidecar** `<board-folder>/.jasmine/` — everything that belongs
 //!    to one Board: `board.json` (Placements / Annotations / layout),
 //!    `meta.json` (threadId / runtime / settings), `session.jsonl` (timeline),
 //!    `thumbs/`, and dispatch temp images. Lives INSIDE the user's folder so the
 //!    Board is self-contained and portable (like `.git`). The Codex agent's cwd
-//!    is the folder itself; it is told not to touch `.jasmine/` or legacy
-//!    `.cameo/` state but CAN read under it (sandbox = workspace-write rooted at
-//!    the folder) — which is why dispatch temp images live here (decision D5).
+//!    is the folder itself; it is told not to touch `.jasmine/` state but CAN
+//!    read under it (sandbox = workspace-write rooted at the folder) — which is
+//!    why dispatch temp images live here (decision D5).
 
 use std::path::{Path, PathBuf};
 
@@ -24,32 +23,7 @@ pub fn jasmine_data_dir() -> PathBuf {
     if let Ok(custom) = std::env::var("JASMINE_HOME") {
         return PathBuf::from(custom);
     }
-    if let Ok(custom) = std::env::var("CAMEO_HOME") {
-        return PathBuf::from(custom);
-    }
-    let home = dirs::home_dir().expect("home dir");
-    let current = home.join(".jasmine");
-    let legacy = home.join(".cameo");
-    if !current.exists() && legacy.exists() {
-        migrate_legacy_global_dir(&legacy, &current);
-    }
-    current
-}
-
-fn migrate_legacy_global_dir(legacy: &Path, current: &Path) {
-    let _ = std::fs::create_dir_all(current);
-    for name in [
-        "config.json",
-        "workspaces.json",
-        "boards.jsonl",
-        "device_id",
-    ] {
-        let src = legacy.join(name);
-        let dst = current.join(name);
-        if src.exists() && !dst.exists() {
-            let _ = std::fs::copy(src, dst);
-        }
-    }
+    dirs::home_dir().expect("home dir").join(".jasmine")
 }
 
 pub fn jasmine_logs_dir() -> PathBuf {
@@ -74,15 +48,9 @@ pub fn ensure_data_layout() -> std::io::Result<()> {
 
 // ── Per-Board sidecar (inside the user's folder) ─────────────────────────────
 
-/// `<folder>/.jasmine` (or existing legacy `<folder>/.cameo`)
+/// `<folder>/.jasmine` — the per-Board sidecar.
 pub fn board_sidecar_dir(folder: &Path) -> PathBuf {
-    let current = folder.join(".jasmine");
-    let legacy = folder.join(".cameo");
-    if !current.exists() && legacy.exists() {
-        legacy
-    } else {
-        current
-    }
+    folder.join(".jasmine")
 }
 
 /// `<folder>/.jasmine/board.json` — Placements / Annotations / layout.

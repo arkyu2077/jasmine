@@ -1,4 +1,4 @@
-//! Global app config — `~/.jasmine/config.json` (legacy `~/.cameo` supported).
+//! Global app config — `~/.jasmine/config.json`.
 //! App-level settings that are NOT
 //! tied to any one Board (currently: the network proxy). Atomic tmp+rename
 //! write, like the Board doc (storage.rs).
