@@ -15,12 +15,10 @@
 
 import { ipc } from "../../lib/ipc";
 
-export const CLOUD_API_BASE = (import.meta.env.VITE_JASMINE_API_BASE ??
-  import.meta.env.VITE_CAMEO_API_BASE) as
+export const CLOUD_API_BASE = import.meta.env.VITE_JASMINE_API_BASE as
   | string
   | undefined;
-export const CLOUD_API_KEY = (import.meta.env.VITE_JASMINE_API_KEY ??
-  import.meta.env.VITE_CAMEO_API_KEY) as
+export const CLOUD_API_KEY = import.meta.env.VITE_JASMINE_API_KEY as
   | string
   | undefined;
 export const CLOUD_ENABLED = !!CLOUD_API_BASE && !!CLOUD_API_KEY;

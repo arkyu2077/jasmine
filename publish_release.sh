@@ -196,7 +196,7 @@ verify_r2_urls() {
 
 # GitHub release assets are a human-facing mirror only. R2 is the canonical
 # download source for both the website (latest.json) and the Tauri updater.
-GH_REPO="hAcKlyc/cameo"
+GH_REPO="arkyu2077/jasmine"
 declare -a GH_FILES=()
 DMG_ARM64=""; DMG_X64=""
 

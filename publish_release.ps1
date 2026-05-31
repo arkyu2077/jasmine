@@ -212,7 +212,7 @@ function Test-R2Urls($uploads) {
 
 # GitHub release assets are a human-facing mirror only. R2 is the canonical
 # download source for both the website (latest_win.json) and the Tauri updater.
-$ghRepo  = "hAcKlyc/cameo"
+$ghRepo  = "arkyu2077/jasmine"
 $ghFiles = @()
 
 # -- Windows scan (x64) ------------------------------------------------------
