@@ -1,6 +1,6 @@
 # Changelog
 
-User-facing release notes for Cameo. This file describes what changed from a
+User-facing release notes for Jasmine. This file describes what changed from a
 user's point of view, rather than listing internal implementation details.
 
 ## [0.1.3] - 2026-05-29
@@ -13,7 +13,7 @@ user's point of view, rather than listing internal implementation details.
 - You can keep steering Codex while a turn is running by typing a follow-up and
   pressing Enter; the visible Stop button now only stops the active conversation.
 - Codex connection recovery is clearer, with better reconnect behavior, proxy
-  diagnostics, and an in-chat warning when Cameo detects that Codex cannot reach
+  diagnostics, and an in-chat warning when Jasmine detects that Codex cannot reach
   the network.
 - Image previews and board image operations are more reliable on Windows,
   including fallback loading for thumbnails, marked images, and crops.
@@ -24,11 +24,11 @@ user's point of view, rather than listing internal implementation details.
 
 ### Improvements
 
-- You can now export several selected images at once into a folder, with Cameo
+- You can now export several selected images at once into a folder, with Jasmine
   preserving the original filenames and avoiding collisions automatically.
 - Image loading is more reliable across macOS and Windows, especially for board
-  images served through Cameo's local image protocol.
-- App updates and website download links now use Cameo's dedicated release CDN,
+  images served through Jasmine's local image protocol.
+- App updates and website download links now use Jasmine's dedicated release CDN,
   while GitHub Releases remain available as a manual installer mirror.
 
 ---
@@ -55,7 +55,7 @@ user's point of view, rather than listing internal implementation details.
 
 ### First Public Release
 
-Cameo is now available as an image-first desktop canvas for your local Codex
+Jasmine is now available as an image-first desktop canvas for your local Codex
 agent. It gives Codex a spatial workspace for image generation and editing:
 open a folder, point at the images you mean, mark the region you want to change,
 and let the results fan out across the board instead of disappearing into a chat
@@ -77,14 +77,14 @@ thread.
 - Crop, copy, export, reveal files in the system file manager, and keep working
   with normal local image files.
 - Use built-in presets for common image operations alongside free-form prompts.
-- Browse the prompt gallery from the app or at cameo.ink/gallery for examples
+- Browse the prompt gallery from the app when cloud/gallery support is configured
   and starting points.
 
 ### Desktop App
 
 - Native app for macOS and Windows, built with a GPU-backed canvas for large
   image boards.
-- Uses your own logged-in Codex CLI and ChatGPT subscription. Cameo does not
+- Uses your own logged-in Codex CLI and ChatGPT subscription. Jasmine does not
   bundle Codex, sell tokens, or require an API key.
 - Includes workspace restore, multiple sessions per board, timeline persistence,
   streaming Codex responses, clarifying questions, settings, proxy support,
@@ -94,6 +94,6 @@ thread.
 
 ### Notes
 
-This is the first public open-source release of Cameo under AGPL-3.0. The core
+This is the first public open-source release of Jasmine under AGPL-3.0. The core
 loop is in place: open a folder, work on images spatially, talk to Codex with
 visual references, and keep every result as a non-destructive local artifact.

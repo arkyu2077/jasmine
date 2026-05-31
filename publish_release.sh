@@ -39,13 +39,13 @@ warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
 die()  { printf '  \033[31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 size_of() { ls -lh "$1" | awk '{print $5}'; }
 tarball_short_version() {
-  tar -xOzf "$1" Cameo.app/Contents/Info.plist 2>/dev/null \
+  tar -xOzf "$1" Jasmine.app/Contents/Info.plist 2>/dev/null \
     | plutil -extract CFBundleShortVersionString raw - 2>/dev/null || true
 }
 expected_dmg_name() {
   case "$1" in
-    aarch64-apple-darwin) echo "Cameo_${2}_aarch64.dmg" ;;
-    x86_64-apple-darwin) echo "Cameo_${2}_x64.dmg" ;;
+    aarch64-apple-darwin) echo "Jasmine_${2}_aarch64.dmg" ;;
+    x86_64-apple-darwin) echo "Jasmine_${2}_x64.dmg" ;;
     *) echo "" ;;
   esac
 }
@@ -90,7 +90,7 @@ else
   die "version mismatch: package.json=$pkg_ver tauri.conf.json=$conf_ver Cargo.toml=$cargo_ver"
 fi
 PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-NOTES="Cameo v${VERSION}"
+NOTES="Jasmine v${VERSION}"
 DOWNLOAD_BASE="https://r.cameo.ink/release/v${VERSION}"
 
 # ── locate artifacts ────────────────────────────────────────────────────────
@@ -124,7 +124,7 @@ ensure_sig() {
 
 write_manifest() {
   local manifest_name="$1"  # e.g. darwin-aarch64
-  local payload_filename="$2"  # filename on R2, e.g. Cameo_aarch64.app.tar.gz
+  local payload_filename="$2"  # filename on R2, e.g. Jasmine_aarch64.app.tar.gz
   local sig_file="$3"  # local path to .sig (or empty)
   local signature=""
   if [[ -n "$sig_file" && -f "$sig_file" ]]; then
@@ -228,7 +228,7 @@ for arch_pair in "aarch64-apple-darwin:aarch64:darwin-aarch64" "x86_64-apple-dar
 
   SIG=$(ensure_sig "$TAR") || die "updater signature missing for $RUST_TARGET: ${TAR}.sig"
   # Add arch suffix to the uploaded filename so ARM and Intel don't clash on
-  # R2 (Tauri names both "Cameo.app.tar.gz"; we rename on upload).
+  # R2 (Tauri names both "Jasmine.app.tar.gz"; we rename on upload).
   base=$(basename "$TAR" .app.tar.gz)
   UPLOAD_NAME="${base}_${ARCH}.app.tar.gz"
   queue "$TAR" "release/v${VERSION}/${UPLOAD_NAME}"
@@ -247,7 +247,7 @@ for arch_pair in "aarch64-apple-darwin:aarch64:darwin-aarch64" "x86_64-apple-dar
 done
 
 # ── website download manifest (latest.json) ──────────────────────────────────
-# cameo_web's download buttons fetch this from R2. URLs point at the R2 installer
+# Jasmine website's download buttons fetch this from R2. URLs point at the R2 installer
 # objects, not GitHub Releases.
 if [[ -n "$DMG_ARM64" || -n "$DMG_X64" ]]; then
   LATEST_JSON="${MANIFEST_DIR}/latest.json"
@@ -332,12 +332,12 @@ if command -v gh >/dev/null 2>&1 && [[ ${#GH_FILES[@]} -gt 0 ]]; then
   TAG="v${VERSION}"
   info "GitHub release: ${GH_REPO}@${TAG}"
   if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-    git tag -a "$TAG" -m "Cameo $TAG" && git push origin "$TAG" && ok "tagged $TAG"
+    git tag -a "$TAG" -m "Jasmine $TAG" && git push origin "$TAG" && ok "tagged $TAG"
   else
     ok "tag $TAG already exists"
   fi
   if ! gh release view "$TAG" >/dev/null 2>&1; then
-    gh release create "$TAG" --title "Cameo $TAG" --notes "$NOTES" --verify-tag && ok "created GitHub release $TAG"
+    gh release create "$TAG" --title "Jasmine $TAG" --notes "$NOTES" --verify-tag && ok "created GitHub release $TAG"
   fi
   info "uploading ${#GH_FILES[@]} GitHub release asset(s) — this may take a while"
   gh release upload "$TAG" "${GH_FILES[@]}" --clobber \

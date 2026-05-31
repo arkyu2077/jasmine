@@ -35,11 +35,13 @@ fn with_doc_save<T>(
     Ok(result)
 }
 
-/// Folder to auto-open on launch: CAMEO_OPEN_BOARD (testing) → else the most
+/// Folder to auto-open on launch: JASMINE_OPEN_BOARD (testing) → else the most
 /// recent workspace → else create a fresh default workspace.
 #[tauri::command]
 pub fn initial_board() -> Option<String> {
-    if let Ok(p) = std::env::var("CAMEO_OPEN_BOARD") {
+    if let Ok(p) =
+        std::env::var("JASMINE_OPEN_BOARD").or_else(|_| std::env::var("CAMEO_OPEN_BOARD"))
+    {
         if std::path::Path::new(&p).is_dir() {
             return Some(p);
         }
@@ -98,11 +100,12 @@ pub fn remove_workspace(id: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Optional auto-send prompt (`CAMEO_TEST_PROMPT`) for headless end-to-end
+/// Optional auto-send prompt (`JASMINE_TEST_PROMPT`) for headless end-to-end
 /// testing of the dispatch → generate → place loop. Dev/testing only.
 #[tauri::command]
 pub fn initial_test_prompt() -> Option<String> {
-    std::env::var("CAMEO_TEST_PROMPT")
+    std::env::var("JASMINE_TEST_PROMPT")
+        .or_else(|_| std::env::var("CAMEO_TEST_PROMPT"))
         .ok()
         .filter(|s| !s.is_empty())
 }
@@ -530,10 +533,10 @@ pub struct ChatImageResolution {
     /// True when `abs_path` is inside the board's workspace folder.
     in_workspace: bool,
     /// Relative to the workspace folder, when `in_workspace`. The UI uses
-    /// this with `cameoUrl(boardId, relPath)` to load the full image.
+    /// this with `jasmineUrl(boardId, relPath)` to load the full image.
     workspace_rel_path: Option<String>,
     /// Base64-encoded JPEG thumbnail (max side 240 px) for OUT-OF-workspace
-    /// images, where the Cameo image protocol won't reach. Generated once per
+    /// images, where the Jasmine image protocol won't reach. Generated once per
     /// resolve and cached in the JS chat store.
     thumb_data_url: Option<String>,
     /// Existing canvas placement for the same image bytes, if this path
@@ -621,7 +624,7 @@ pub fn resolve_chat_image(
             .map(|p| p.id.clone())
     });
 
-    // Out-of-workspace images can't be loaded through the Cameo image protocol
+    // Out-of-workspace images can't be loaded through the Jasmine image protocol
     // (which is scoped to one board folder); inline them as a base64 thumbnail
     // instead. JS caches the result so the cost is paid once per unique path
     // per session.
@@ -729,9 +732,7 @@ fn build_thumb_data_url(path: &Path) -> anyhow::Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        file_url_to_path, normalize_chat_path_raw, path_to_url_rel, unique_export_dest,
-    };
+    use super::{file_url_to_path, normalize_chat_path_raw, path_to_url_rel, unique_export_dest};
     use std::collections::HashSet;
     use std::path::Path;
 
@@ -794,7 +795,7 @@ pub fn import_chat_image_to_canvas(
 
     // If outside the workspace, stage into <workspace>/imports/ first so the
     // ensuing import_external sees a workspace-relative source and the
-    // Placement winds up referencing in-workspace bytes (Cameo's "all canvas
+    // Placement winds up referencing in-workspace bytes (Jasmine's "all canvas
     // resources live in the workspace folder" invariant).
     let staged_src = if in_workspace {
         canonical_src
@@ -1125,7 +1126,7 @@ pub fn rename_asset(
 
 /// Write a rendered overlay PNG into the Board root as a dotfile
 /// (`.overlay-<id>.png`): in the workspace so Codex's sandbox can read it (D5),
-/// hidden + skipped by our image scan, and not under `.cameo/` (D7). Returns the
+/// hidden + skipped by our image scan, and not under Jasmine state dirs (D7). Returns the
 /// relative path to name in the prompt.
 #[tauri::command]
 pub fn write_overlay(
@@ -1183,7 +1184,11 @@ pub fn list_sessions(
     registry: State<Arc<BoardRegistry>>,
 ) -> Result<SessionsDoc, String> {
     let folder = registry.folder(&board_id).ok_or("unknown board")?;
-    Ok(session::load(&folder))
+    let provider = crate::config::load().provider.runtime_identity();
+    let legacy = storage::load_meta(&folder).thread_id.clone();
+    let mut doc = session::ensure_active_for_provider(&folder, legacy, &provider, &provider.name);
+    doc.current_provider_key = Some(provider.key);
+    Ok(doc)
 }
 
 /// Start a fresh conversation (new thread); returns its session id.
@@ -1193,6 +1198,22 @@ pub async fn new_session(
     codex: State<'_, Arc<CodexRegistry>>,
 ) -> Result<String, String> {
     codex::new_session(codex.inner().clone(), board_id).await
+}
+
+/// Select or create the session that belongs to the provider currently saved in
+/// config, without talking to the running app-server. Used before provider
+/// switches so no provider resumes another provider's thread.
+#[tauri::command]
+pub fn prepare_runtime_session(
+    board_id: String,
+    title: String,
+    registry: State<Arc<BoardRegistry>>,
+) -> Result<String, String> {
+    let folder = registry.folder(&board_id).ok_or("unknown board")?;
+    let provider = crate::config::load().provider.runtime_identity();
+    let legacy = storage::load_meta(&folder).thread_id.clone();
+    let doc = session::ensure_active_for_provider(&folder, legacy, &provider, &title);
+    doc.active_session_id.ok_or("no active session".to_string())
 }
 
 #[tauri::command]
@@ -1240,7 +1261,7 @@ pub fn append_message(
     Ok(())
 }
 
-// ── App config (global ~/.cameo/config.json) + diagnostics ───────────────────
+// ── App config (global app config) + diagnostics ─────────────────────────────
 
 /// Load the global app config (network proxy etc.). Missing/corrupt → defaults.
 #[tauri::command]
@@ -1273,10 +1294,10 @@ pub async fn probe_codex_network() -> crate::proxy::ProxyProbeResult {
     crate::proxy::probe_codex_connectivity(&cfg.proxy).await
 }
 
-/// Open the unified log folder (`~/.cameo/logs`) in the OS file manager.
+/// Open the unified log folder in the OS file manager.
 #[tauri::command]
 pub fn open_logs_dir() -> Result<(), String> {
-    let dir = crate::paths::cameo_logs_dir();
+    let dir = crate::paths::jasmine_logs_dir();
     tauri_plugin_opener::open_path(&dir, None::<&str>).map_err(e2s)
 }
 

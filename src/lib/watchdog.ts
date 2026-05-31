@@ -21,7 +21,7 @@
  *      `resume()` re-baselines to now so a 5-minute confirmation prompt
  *      doesn't immediately trip the watchdog on resume.
  *
- * A browser-side timer — Cameo manages turn state in the JS chat store (not a
+ * A browser-side timer — Jasmine manages turn state in the JS chat store (not a
  * Node sidecar), so the inactivity clock lives here rather than server-side.
  */
 export interface WatchdogOptions {

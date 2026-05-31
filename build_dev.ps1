@@ -1,4 +1,4 @@
-# build_dev.ps1 — kill running instances, build a debug cameo.exe, print the path.
+# build_dev.ps1 — kill running instances, build a debug jasmine.exe, print the path.
 #
 # Unsigned, fast iteration. Skips the NSIS installer (use build_release.ps1 for
 # that) and produces the raw executable you can double-click.
@@ -8,7 +8,7 @@
 #   .\build_dev.ps1 -Open      # ...and launch it
 #   .\build_dev.ps1 -Clean     # cargo clean first (full rebuild)
 #
-# Output: src-tauri\target\debug\cameo.exe
+# Output: src-tauri\target\debug\jasmine.exe
 # macOS: use build_dev.sh instead.
 
 param(
@@ -27,8 +27,8 @@ if (-not (Get-Command pnpm  -ErrorAction SilentlyContinue)) { Die "pnpm not on P
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { Die "cargo not on PATH (run .\setup.ps1)" }
 
 # -- kill anything running ----------------------------------------------------
-Info "stopping running Cameo / dev server / codex sidecar"
-Get-Process -Name 'cameo','Cameo' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Info "stopping running Jasmine / dev server / codex sidecar"
+Get-Process -Name 'jasmine','Jasmine' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Get-Process -Name 'codex'         -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 try {
   Get-NetTCPConnection -LocalPort 1420 -ErrorAction SilentlyContinue |
@@ -56,7 +56,7 @@ Info "pnpm tauri build --debug --no-bundle"
 pnpm tauri build --debug --no-bundle
 if ($LASTEXITCODE -ne 0) { Die "tauri build failed" }
 
-$exe = Join-Path $PSScriptRoot 'src-tauri\target\debug\cameo.exe'
+$exe = Join-Path $PSScriptRoot 'src-tauri\target\debug\jasmine.exe'
 if (-not (Test-Path $exe)) { Die "exe not produced at $exe" }
 
 $secs = [int]((Get-Date) - $start).TotalSeconds
@@ -68,4 +68,4 @@ Write-Host "     $exe"
 Write-Host "  +-----------------------------------------------------------"
 Write-Host ""
 
-if ($Open) { Info "launching cameo.exe"; Start-Process $exe }
+if ($Open) { Info "launching jasmine.exe"; Start-Process $exe }

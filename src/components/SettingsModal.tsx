@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronLeft, Copy, Eye, EyeOff, Loader2, Plus, Trash2, X } from "lucide-react";
 import { useSettingsStore } from "../store/settings";
 import { useT, useLocaleStore, type LocaleChoice } from "../i18n/locale";
 import { ipc } from "../lib/ipc";
 import type { MsgKey } from "../i18n/messages";
-import type { ProxyProbeResult, ProxySettings } from "../types";
+import type { ProviderSettings, ProxyProbeResult, ProxySettings } from "../types";
+import { isValidProviderBaseUrl, normalizeProviderBaseUrl, providerApiKeyLooksLikeUrl } from "../lib/provider";
 
 const PROTOCOLS: ProxySettings["protocol"][] = ["http", "socks5"];
 
@@ -49,16 +50,26 @@ function proxyProbeMessageKey(kind: string): MsgKey {
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const config = useSettingsStore((s) => s.config);
   const loaded = useSettingsStore((s) => s.loaded);
-  const applying = useSettingsStore((s) => s.applying);
+  const proxyApplying = useSettingsStore((s) => s.proxyApplying);
+  const providerApplying = useSettingsStore((s) => s.providerApplying);
   const localeChoice = useLocaleStore((s) => s.choice);
   const proxy = config.proxy;
+  const provider = config.provider;
+  const providerProfiles = provider.profiles.length ? provider.profiles : [];
+  const activeProviderId = provider.active_id ?? providerProfiles[0]?.id ?? "";
   const [proxyProbe, setProxyProbe] = useState<ProxyProbeState>({ status: "idle" });
+  const [providerView, setProviderView] = useState<"list" | "edit">("list");
+  const [showProviderKey, setShowProviderKey] = useState(false);
   const proxyProbeGenerationRef = useRef(0);
   const t = useT();
 
   useEffect(() => {
     if (!loaded) void useSettingsStore.getState().load();
   }, [loaded]);
+
+  useEffect(() => {
+    if (!provider.enabled) setProviderView("list");
+  }, [provider.enabled]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -68,9 +79,19 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const set = (patch: Partial<ProxySettings>) => useSettingsStore.getState().setProxy(patch);
+  const setProxy = (patch: Partial<ProxySettings>) => useSettingsStore.getState().setProxy(patch);
+  const setProvider = (patch: Partial<ProviderSettings>) => useSettingsStore.getState().setProvider(patch);
+  const addProviderProfile = () => useSettingsStore.getState().addProviderProfile();
+  const duplicateProviderProfile = () => useSettingsStore.getState().duplicateProviderProfile();
+  const selectProviderProfile = (id: string) => useSettingsStore.getState().selectProviderProfile(id);
+  const removeProviderProfile = (id: string) => useSettingsStore.getState().removeProviderProfile(id);
   const hostOk = isValidHost(proxy.host);
   const portOk = isValidPort(proxy.port);
+  const providerBaseOk = isValidProviderBaseUrl(provider.base_url);
+  const normalizedProviderBaseUrl = providerBaseOk ? normalizeProviderBaseUrl(provider.base_url) : "";
+  const providerBaseWillNormalize =
+    providerBaseOk && provider.base_url.trim() !== normalizedProviderBaseUrl;
+  const providerKeyLooksLikeUrl = providerApiKeyLooksLikeUrl(provider.api_key);
 
   useEffect(() => {
     if (!proxy.enabled || !hostOk || !portOk) {
@@ -116,6 +137,12 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     const p = useSettingsStore.getState().config.proxy;
     if (!p.enabled || (isValidHost(p.host) && isValidPort(p.port))) {
       void useSettingsStore.getState().commitProxy();
+    }
+  };
+  const commitProvider = () => {
+    const p = useSettingsStore.getState().config.provider;
+    if (!p.enabled || isValidProviderBaseUrl(p.base_url)) {
+      void useSettingsStore.getState().commitProvider();
     }
   };
   const proxyProbeDetail =
@@ -181,7 +208,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 aria-checked={proxy.enabled}
                 aria-label={t("settings.enableProxy")}
                 onClick={() => {
-                  set({ enabled: !proxy.enabled });
+                  setProxy({ enabled: !proxy.enabled });
                   commit();
                 }}
               >
@@ -199,7 +226,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                       className="cm-select"
                       value={proxy.protocol}
                       onChange={(e) => {
-                        set({ protocol: e.target.value as ProxySettings["protocol"] });
+                        setProxy({ protocol: e.target.value as ProxySettings["protocol"] });
                         commit();
                       }}
                     >
@@ -220,7 +247,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                         placeholder="127.0.0.1"
                         spellCheck={false}
                         aria-label={t("settings.host")}
-                        onChange={(e) => set({ host: e.target.value })}
+                        onChange={(e) => setProxy({ host: e.target.value })}
                         onBlur={commit}
                       />
                       <span className="cm-set-endpoint__colon">:</span>
@@ -231,7 +258,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                         max={65535}
                         value={proxy.port}
                         aria-label={t("settings.port")}
-                        onChange={(e) => set({ port: Number(e.target.value) || 0 })}
+                        onChange={(e) => setProxy({ port: Number(e.target.value) || 0 })}
                         onBlur={commit}
                       />
                     </div>
@@ -240,7 +267,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
                 {!hostOk || !portOk ? (
                   <p className="cm-set-hint cm-set-hint--err">{t("settings.invalid")}</p>
-                ) : applying ? (
+                ) : proxyApplying ? (
                   <p className="cm-set-hint">{t("settings.proxyApplying")}</p>
                 ) : proxyProbe.status !== "idle" ? (
                   <div
@@ -264,6 +291,252 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                     </span>
                   </div>
                 ) : null}
+              </>
+            )}
+          </section>
+
+          <section className="cm-set-section">
+            <div className="cm-set-section__head">
+              <h3 className="cm-set-section__title">{t("settings.provider")}</h3>
+              <button
+                type="button"
+                className={`cm-toggle${provider.enabled ? " is-on" : ""}`}
+                role="switch"
+                aria-checked={provider.enabled}
+                aria-label={t("settings.enableProvider")}
+                onClick={() => {
+                  setProvider({ enabled: !provider.enabled });
+                  commitProvider();
+                }}
+              >
+                <span className="cm-toggle__knob" />
+              </button>
+            </div>
+            <p className="cm-set-section__desc">{t("settings.providerDesc")}</p>
+
+            {provider.enabled && (
+              <>
+                {providerView === "list" ? (
+                  <div className="cm-provider-screen">
+                    <p className="cm-set-hint">
+                      {t("settings.providerManagerHint", { count: providerProfiles.length })}
+                    </p>
+                    <div className="cm-provider-list" aria-label={t("settings.providerList")}>
+                    <div className="cm-provider-list__head">
+                      <span>{t("settings.providerList")}</span>
+                      <button
+                        type="button"
+                        className="cm-mini-action"
+                        onClick={() => {
+                          addProviderProfile();
+                          commitProvider();
+                          setProviderView("edit");
+                        }}
+                      >
+                        <Plus size={14} />
+                        {t("settings.providerAddShort")}
+                      </button>
+                    </div>
+                    <div className="cm-provider-list__items">
+                      {providerProfiles.map((profile) => {
+                        const isActive = profile.id === activeProviderId;
+                        const name = profile.name.trim() || t("settings.providerUnnamed");
+                        const protocol =
+                          profile.api_kind === "responses"
+                            ? t("agent.provider.protocol.responses")
+                            : t("agent.provider.protocol.chatCompletions");
+                        return (
+                          <div
+                            key={profile.id}
+                            role="button"
+                            tabIndex={0}
+                            className={`cm-provider-item${isActive ? " is-active" : ""}`}
+                            onClick={() => {
+                              selectProviderProfile(profile.id);
+                              commitProvider();
+                              setProviderView("edit");
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                selectProviderProfile(profile.id);
+                                commitProvider();
+                                setProviderView("edit");
+                              }
+                            }}
+                          >
+                            <span className="cm-provider-item__main">
+                              <span className="cm-provider-item__name">{name}</span>
+                              <span className="cm-provider-item__meta">{profile.model || t("settings.providerNoModel")}</span>
+                            </span>
+                            <span className="cm-provider-item__sub">{protocol}</span>
+                            <span className="cm-provider-item__url" title={profile.base_url}>
+                              {profile.base_url || t("settings.providerNoBaseUrl")}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={providerProfiles.length <= 1}
+                              className="cm-provider-item__delete"
+                              aria-label={t("settings.providerDelete")}
+                              title={t("settings.providerDelete")}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeProviderProfile(profile.id);
+                                commitProvider();
+                              }}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  </div>
+                ) : (
+                  <div className="cm-provider-edit-page">
+                    <div className="cm-provider-edit-head">
+                      <button
+                        type="button"
+                        className="cm-back-btn"
+                        onClick={() => setProviderView("list")}
+                      >
+                        <ChevronLeft size={16} />
+                        {t("settings.providerBack")}
+                      </button>
+                      <div className="cm-provider-edit-head__title">
+                        <span className="cm-provider-detail__eyebrow">{t("settings.providerEditing")}</span>
+                        <span className="cm-provider-detail__title">
+                          {provider.name.trim() || t("settings.providerUnnamed")}
+                        </span>
+                      </div>
+                      <div className="cm-provider-edit-head__actions">
+                        <button
+                          type="button"
+                          className="cm-mini-action"
+                          onClick={() => {
+                            duplicateProviderProfile();
+                            commitProvider();
+                          }}
+                        >
+                          <Copy size={14} />
+                          {t("settings.providerDuplicate")}
+                        </button>
+                        <button
+                          type="button"
+                          className="cm-mini-action cm-mini-action--danger"
+                          disabled={providerProfiles.length <= 1}
+                          onClick={() => {
+                            removeProviderProfile(activeProviderId);
+                            commitProvider();
+                            setProviderView("list");
+                          }}
+                        >
+                          <Trash2 size={14} />
+                          {t("settings.providerDeleteShort")}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="cm-set-hint">{t("settings.providerEditHint")}</p>
+                    <div className="cm-set-card cm-provider-detail__form">
+                      <div className="cm-set-row">
+                        <span className="cm-set-row__label">{t("settings.providerName")}</span>
+                        <input
+                          className="cm-input cm-input--wide"
+                          value={provider.name}
+                          placeholder="OpenRouter"
+                          spellCheck={false}
+                          aria-label={t("settings.providerName")}
+                          onChange={(e) => setProvider({ name: e.target.value })}
+                          onBlur={commitProvider}
+                        />
+                      </div>
+
+                      <div className="cm-set-row">
+                        <span className="cm-set-row__label">{t("settings.providerBaseUrl")}</span>
+                        <input
+                          className={`cm-input cm-input--wide${providerBaseOk ? "" : " is-invalid"}`}
+                          value={provider.base_url}
+                          placeholder="https://api.example.com/v1"
+                          spellCheck={false}
+                          aria-label={t("settings.providerBaseUrl")}
+                          onChange={(e) => setProvider({ base_url: e.target.value })}
+                          onBlur={(e) => {
+                            setProvider({ base_url: normalizeProviderBaseUrl(e.currentTarget.value) });
+                            commitProvider();
+                          }}
+                        />
+                      </div>
+
+                      <div className="cm-set-row">
+                        <span className="cm-set-row__label">{t("settings.providerApiKind")}</span>
+                        <select
+                          className="cm-select"
+                          value={provider.api_kind}
+                          aria-label={t("settings.providerApiKind")}
+                          onChange={(e) => {
+                            setProvider({ api_kind: e.target.value as ProviderSettings["api_kind"] });
+                            commitProvider();
+                          }}
+                        >
+                          <option value="chat_completions">{t("settings.providerApiKind.chatCompletions")}</option>
+                          <option value="responses">{t("settings.providerApiKind.responses")}</option>
+                        </select>
+                      </div>
+
+                      <div className="cm-set-row">
+                        <span className="cm-set-row__label">{t("settings.providerModel")}</span>
+                        <input
+                          className="cm-input cm-input--wide"
+                          value={provider.model}
+                          placeholder="gpt-5.3-codex"
+                          spellCheck={false}
+                          aria-label={t("settings.providerModel")}
+                          onChange={(e) => setProvider({ model: e.target.value })}
+                          onBlur={commitProvider}
+                        />
+                      </div>
+
+                      <div className="cm-set-row">
+                        <span className="cm-set-row__label">{t("settings.providerApiKey")}</span>
+                        <div className="cm-secret">
+                          <input
+                            className={`cm-input cm-input--secret${providerKeyLooksLikeUrl ? " is-invalid" : ""}`}
+                            type={showProviderKey ? "text" : "password"}
+                            value={provider.api_key}
+                            placeholder="sk-..."
+                            spellCheck={false}
+                            aria-label={t("settings.providerApiKey")}
+                            onChange={(e) => setProvider({ api_key: e.target.value })}
+                            onBlur={commitProvider}
+                          />
+                          <button
+                            type="button"
+                            className="cm-secret__toggle"
+                            aria-label={t(showProviderKey ? "settings.hideSecret" : "settings.showSecret")}
+                            title={t(showProviderKey ? "settings.hideSecret" : "settings.showSecret")}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setShowProviderKey((v) => !v)}
+                          >
+                            {showProviderKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {providerView !== "edit" ? null : !providerBaseOk ? (
+                  <p className="cm-set-hint cm-set-hint--err">{t("settings.providerInvalid")}</p>
+                ) : providerKeyLooksLikeUrl ? (
+                  <p className="cm-set-hint cm-set-hint--err">{t("settings.providerKeyLooksLikeUrl")}</p>
+                ) : providerApplying ? (
+                  <p className="cm-set-hint">{t("settings.providerApplying")}</p>
+                ) : providerBaseWillNormalize ? (
+                  <p className="cm-set-hint">{t("settings.providerBaseUrlWillUse", { url: normalizedProviderBaseUrl })}</p>
+                ) : (
+                  <p className="cm-set-hint">{t("settings.providerKeyHint")}</p>
+                )}
               </>
             )}
           </section>

@@ -11,7 +11,7 @@ import {
   Texture,
 } from "pixi.js";
 import type { Asset, Placement, PlacementUpdate, Shape, ShapeKind } from "../types";
-import { cameoUrl, ipc } from "../lib/ipc";
+import { jasmineUrl, ipc } from "../lib/ipc";
 import { loadAssetObjectUrl } from "../lib/asset-url";
 
 export type Tool = "select" | "point" | "rect" | "ellipse" | "brush";
@@ -150,7 +150,7 @@ async function loadTexture(url: string): Promise<Texture> {
 }
 
 async function loadBoardTexture(boardId: string, asset: Asset): Promise<Texture> {
-  const url = cameoUrl(boardId, asset.path);
+  const url = jasmineUrl(boardId, asset.path);
   try {
     return await loadTexture(url);
   } catch (err) {

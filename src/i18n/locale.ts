@@ -4,7 +4,7 @@ import { messages, type MsgKey } from "./messages";
 export type LocaleChoice = "system" | "en" | "zh";
 type Lang = "en" | "zh";
 
-const STORE_KEY = "cameo.locale";
+const STORE_KEY = "jasmine.locale";
 
 function systemLang(): Lang {
   return typeof navigator !== "undefined" && navigator.language?.toLowerCase().startsWith("zh") ? "zh" : "en";

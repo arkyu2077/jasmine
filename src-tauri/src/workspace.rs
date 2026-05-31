@@ -1,12 +1,12 @@
 //! Workspaces = recently opened/added Board folders. A small global index plus
 //! an app-owned default area where "+ New" creates fresh boards.
 //!
-//! - Index: `~/.cameo/workspaces.json` (array, atomic rewrite).
-//! - Default area: `~/.cameo/workspace/<name>/` for app-created boards.
+//! - Index: app data `workspaces.json` (array, atomic rewrite).
+//! - Default area: app data `workspace/<name>/` for app-created boards.
 //! - Identity = the Board's stable `boardId` (meta.json). The index is keyed by
 //!   it, so renames/moves never duplicate an entry.
 
-use crate::paths::cameo_data_dir;
+use crate::paths::jasmine_data_dir;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -22,11 +22,11 @@ pub struct WorkspaceEntry {
 }
 
 fn index_path() -> PathBuf {
-    cameo_data_dir().join("workspaces.json")
+    jasmine_data_dir().join("workspaces.json")
 }
 
 pub fn workspace_area() -> PathBuf {
-    cameo_data_dir().join("workspace")
+    jasmine_data_dir().join("workspace")
 }
 
 fn now_ms() -> i64 {
@@ -63,8 +63,10 @@ fn kind_for(path: &Path) -> String {
 
 /// Recent workspaces (most-recent first), dropping any whose folder vanished.
 pub fn list() -> Vec<WorkspaceEntry> {
-    let mut entries: Vec<WorkspaceEntry> =
-        read_index().into_iter().filter(|e| Path::new(&e.path).is_dir()).collect();
+    let mut entries: Vec<WorkspaceEntry> = read_index()
+        .into_iter()
+        .filter(|e| Path::new(&e.path).is_dir())
+        .collect();
     entries.sort_by(|a, b| b.last_opened.cmp(&a.last_opened));
     entries
 }
@@ -80,7 +82,13 @@ pub fn touch(id: &str, folder: &Path, name: &str) {
         e.kind = kind;
         e.last_opened = now_ms();
     } else {
-        entries.push(WorkspaceEntry { id: id.into(), path, name: name.into(), kind, last_opened: now_ms() });
+        entries.push(WorkspaceEntry {
+            id: id.into(),
+            path,
+            name: name.into(),
+            kind,
+            last_opened: now_ms(),
+        });
     }
     write_index(&entries);
 }

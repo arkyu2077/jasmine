@@ -1,6 +1,6 @@
-//! Cameo — Tauri 2 entry point.
+//! Jasmine — Tauri 2 entry point.
 //!
-//! Wires up logging, the global `~/.cameo` data dir, the Cameo image protocol,
+//! Wires up logging, the global app data dir, the Jasmine image protocol,
 //! the Board registry (in-memory doc authority), the Codex runtime
 //! registry (one app-server per Board), and all commands. Codex sessions are
 //! tree-killed on app exit.
@@ -12,17 +12,19 @@ pub mod commands;
 pub mod config;
 pub mod device;
 pub mod logging;
-pub mod updater;
 pub mod model;
 pub mod paths;
 pub mod process;
 pub mod prompt;
 pub mod protocol;
+pub mod provider;
+pub mod provider_adapter;
 pub mod proxy;
 pub mod runtime;
 pub mod session;
 pub mod storage;
 pub mod tray;
+pub mod updater;
 pub mod workspace;
 
 use board::BoardRegistry;
@@ -36,7 +38,7 @@ pub fn run() {
     // Hold the appender guard for the whole process — dropping it stops the
     // file sink from flushing (see logging::init).
     let _log_guard = logging::init();
-    tracing::info!(module = "lib", "Cameo starting");
+    tracing::info!(module = "lib", "Jasmine starting");
 
     let boards: Arc<BoardRegistry> = Arc::new(BoardRegistry::default());
     let codex_reg: Arc<CodexRegistry> = Arc::new(CodexRegistry::default());
@@ -77,7 +79,7 @@ pub fn run() {
                 }
             }
         })
-        .register_uri_scheme_protocol("cameo", protocol::handle_cameo_uri)
+        .register_uri_scheme_protocol("jasmine", protocol::handle_jasmine_uri)
         .invoke_handler(tauri::generate_handler![
             ping,
             app_version,
@@ -128,13 +130,14 @@ pub fn run() {
             commands::stop_session,
             commands::list_sessions,
             commands::new_session,
+            commands::prepare_runtime_session,
             commands::switch_session,
             commands::rename_session,
             commands::load_session,
             commands::append_message,
         ])
         .build(tauri::generate_context!())
-        .expect("error building Cameo");
+        .expect("error building Jasmine");
 
     app.run(move |_app_handle, event| {
         match event {

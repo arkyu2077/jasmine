@@ -5,7 +5,7 @@
 # with its .app.tar.gz + .sig auto-update payload. Updater artifacts are enabled
 # by bundle.createUpdaterArtifacts in tauri.conf.json. This is the everyday
 # release path that feeds publish_release.sh — running the script with no flags is
-# the correct daily build. Cameo bundles no per-arch binaries (it drives the user's
+# the correct daily build. Jasmine bundles no per-arch binaries (it drives the user's
 # own `codex` CLI), so a single **universal** .dmg is also available via
 # --universal for manual one-link distribution (universal carries NO updater payload).
 #
@@ -40,13 +40,13 @@ die()  { printf '  \033[31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 size_of() { ls -lh "$1" | awk '{print $5}'; }
 plist_short_version() { plutil -extract CFBundleShortVersionString raw "$1" 2>/dev/null || true; }
 tarball_short_version() {
-  tar -xOzf "$1" Cameo.app/Contents/Info.plist 2>/dev/null \
+  tar -xOzf "$1" Jasmine.app/Contents/Info.plist 2>/dev/null \
     | plutil -extract CFBundleShortVersionString raw - 2>/dev/null || true
 }
 expected_dmg_name() {
   case "$1" in
-    aarch64-apple-darwin) echo "Cameo_${2}_aarch64.dmg" ;;
-    x86_64-apple-darwin) echo "Cameo_${2}_x64.dmg" ;;
+    aarch64-apple-darwin) echo "Jasmine_${2}_aarch64.dmg" ;;
+    x86_64-apple-darwin) echo "Jasmine_${2}_x64.dmg" ;;
     *) echo "" ;;
   esac
 }
@@ -157,7 +157,7 @@ for target in "${TARGETS[@]}"; do
   info "pnpm tauri build --target $target --bundles $BUNDLES"
   pnpm tauri build --target "$target" --bundles "$BUNDLES"
 
-  app_plist="src-tauri/target/$target/release/bundle/macos/Cameo.app/Contents/Info.plist"
+  app_plist="src-tauri/target/$target/release/bundle/macos/Jasmine.app/Contents/Info.plist"
   [[ -f "$app_plist" ]] || die "no app bundle produced for $target"
   app_ver=$(plist_short_version "$app_plist")
   [[ "$app_ver" == "$conf_ver" ]] || die "app bundle version mismatch for $target: expected $conf_ver, got ${app_ver:-unknown}"

@@ -1,4 +1,4 @@
-//! Auto-updater for the Cameo desktop client.
+//! Auto-updater for the Jasmine desktop client.
 //!
 //! Background flow (silent download, on-demand install):
 //!   1. App boot + 60s delay → check the platform-specific manifest at
@@ -11,9 +11,9 @@
 //!      (macOS) or fire the NSIS installer (Windows).
 //!
 //! Platform split (the install path is the only real difference):
-//!   • macOS: `Update::download_and_install()` swaps `/Applications/Cameo.app`
+//!   • macOS: `Update::download_and_install()` swaps `/Applications/Jasmine.app`
 //!     atomically; relaunch() picks up the new bundle. One-phase.
-//!   • Windows: `Update::download()` streams bytes to `~/.cameo/pending_update.bin`
+//!   • Windows: `Update::download()` streams bytes to app data `pending_update.bin`
 //!     with metadata in `pending_update.json`. Install runs only when the user
 //!     clicks the titlebar button — at that point we re-resolve `Update` (cached
 //!     from the original check, with 3-retry fallback) and call `install(bytes)`,
@@ -36,7 +36,7 @@ use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 #[cfg(target_os = "windows")]
-use crate::paths::{cameo_data_dir, ensure_data_layout};
+use crate::paths::{ensure_data_layout, jasmine_data_dir};
 #[cfg(target_os = "windows")]
 use serde::Deserialize;
 
@@ -72,12 +72,12 @@ fn cached_update_for(wanted_version: &str) -> Option<Update> {
 
 #[cfg(target_os = "windows")]
 fn pending_bin_path() -> std::path::PathBuf {
-    cameo_data_dir().join("pending_update.bin")
+    jasmine_data_dir().join("pending_update.bin")
 }
 
 #[cfg(target_os = "windows")]
 fn pending_meta_path() -> std::path::PathBuf {
-    cameo_data_dir().join("pending_update.json")
+    jasmine_data_dir().join("pending_update.json")
 }
 
 #[cfg(target_os = "windows")]
@@ -225,7 +225,7 @@ async fn check_and_download_silently_inner(app: &AppHandle) -> Result<Option<Str
 
     #[cfg(target_os = "macos")]
     {
-        // mac: one-phase — bytes stream straight into /Applications/Cameo.app
+        // mac: one-phase — bytes stream straight into /Applications/Jasmine.app
         // (atomic replacement). The running process keeps running on the old
         // bundle; relaunch picks up the new one.
         match update.download_and_install(on_chunk, || {}).await {
@@ -488,7 +488,7 @@ pub async fn install_pending_update(
 }
 
 /// macOS install + relaunch (single command — bytes are already on disk in
-/// `/Applications/Cameo.app` from the silent download). Cleanly stops the
+/// `/Applications/Jasmine.app` from the silent download). Cleanly stops the
 /// codex sidecar before `relaunch()` so the new process can spawn its own.
 #[cfg(target_os = "macos")]
 #[tauri::command]

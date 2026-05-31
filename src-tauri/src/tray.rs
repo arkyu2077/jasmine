@@ -2,7 +2,7 @@
 //!
 //! When `config.close_to_tray` is on (default), closing the window hides it
 //! instead of quitting; the app keeps running behind a tray icon. Left-click
-//! the tray icon (or "Show Cameo") to restore the window; "Quit Cameo" exits.
+//! the tray icon (or "Show Jasmine") to restore the window; "Quit Jasmine" exits.
 //! The hide-vs-quit decision lives in `lib.rs`'s window-close handler (it reads
 //! the config at close time) — this module owns only the tray itself and the
 //! canonical "bring the window back" routine, reused by the macOS dock reopen.
@@ -26,14 +26,18 @@ pub fn setup<R: Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
         return Ok(());
     };
 
-    let show = MenuItemBuilder::with_id(MENU_SHOW, "Show Cameo").build(app)?;
-    let quit = MenuItemBuilder::with_id(MENU_QUIT, "Quit Cameo").build(app)?;
-    let menu = MenuBuilder::new(app).item(&show).separator().item(&quit).build()?;
+    let show = MenuItemBuilder::with_id(MENU_SHOW, "Show Jasmine").build(app)?;
+    let quit = MenuItemBuilder::with_id(MENU_QUIT, "Quit Jasmine").build(app)?;
+    let menu = MenuBuilder::new(app)
+        .item(&show)
+        .separator()
+        .item(&quit)
+        .build()?;
 
     TrayIconBuilder::new()
         .icon(icon)
         .menu(&menu)
-        .tooltip("Cameo")
+        .tooltip("Jasmine")
         // Left-click restores the window (handled below); right-click opens menu.
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
@@ -57,7 +61,7 @@ pub fn setup<R: Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Bring the main window back to the foreground (tray click, "Show Cameo", or
+/// Bring the main window back to the foreground (tray click, "Show Jasmine", or
 /// macOS dock reopen). Idempotent; safe if the window is already visible.
 pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {

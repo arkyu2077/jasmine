@@ -2,7 +2,7 @@
  * Playful "agent is working" copy pool for the ambient streaming-status
  * indicator. Themed around the actual product domain (image generation /
  * canvas / Codex agent) plus light self-deprecation. Deliberately not stuffed
- * with generic programming memes — those don't match Cameo's voice.
+ * with generic programming memes — those don't match Jasmine's voice.
  *
  * Selection is deterministic given a `seed` (an integer that increments on
  * meaningful state transitions and on a timer): same seed → same phrase,
@@ -121,13 +121,13 @@ export function fixedPhrase(
   detail?: string,
 ): string {
   if (locale === "zh") {
-    if (state === "starting") return "Codex 启动中…（首次较慢）";
-    if (state === "thinking") return "正在思考…";
-    if (state === "tool") return detail ? `调用 ${detail} 中…` : "调用工具中…";
+    if (state === "starting") return "工作台热身中…（首次会慢一点）";
+    if (state === "thinking") return "脑内分镜排队中…";
+    if (state === "tool") return detail ? `正在请 ${detail} 帮忙…` : "正在请工具帮忙…";
   } else {
-    if (state === "starting") return "Codex starting up… (first launch is slower)";
-    if (state === "thinking") return "Thinking…";
-    if (state === "tool") return detail ? `Calling ${detail}…` : "Running a tool…";
+    if (state === "starting") return "Warming up the studio… (first launch is slower)";
+    if (state === "thinking") return "Storyboards lining up…";
+    if (state === "tool") return detail ? `Asking ${detail} for a hand…` : "Asking a tool for a hand…";
   }
   return "";
 }

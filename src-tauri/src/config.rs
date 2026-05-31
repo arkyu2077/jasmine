@@ -1,8 +1,10 @@
-//! Global app config — `~/.cameo/config.json`. App-level settings that are NOT
+//! Global app config — `~/.jasmine/config.json` (legacy `~/.cameo` supported).
+//! App-level settings that are NOT
 //! tied to any one Board (currently: the network proxy). Atomic tmp+rename
 //! write, like the Board doc (storage.rs).
 
 use crate::paths::app_config_path;
+use crate::provider::ProviderSettings;
 use crate::proxy::ProxySettings;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -11,6 +13,8 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct AppConfig {
     pub proxy: ProxySettings,
+    /// Optional OpenAI-compatible provider override for the Codex sidecar.
+    pub provider: ProviderSettings,
     /// Disable anonymous usage telemetry (default: false = enabled).
     /// Note: the one-time device registration on first launch is identity
     /// issuance, not behavior tracking, and is not gated by this flag.
@@ -30,6 +34,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             proxy: ProxySettings::default(),
+            provider: ProviderSettings::default(),
             telemetry_opt_out: false,
             last_telemetry_date: None,
             close_to_tray: true,
@@ -41,7 +46,10 @@ impl Default for AppConfig {
 pub fn load() -> AppConfig {
     match std::fs::read(app_config_path()) {
         Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|e| {
-            tracing::warn!(module = "config", "config.json parse failed ({e}); using defaults");
+            tracing::warn!(
+                module = "config",
+                "config.json parse failed ({e}); using defaults"
+            );
             AppConfig::default()
         }),
         Err(_) => AppConfig::default(),

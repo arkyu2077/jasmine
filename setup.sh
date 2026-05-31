@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup.sh — one-time dev environment setup for Cameo on macOS (Apple Silicon + Intel).
+# setup.sh — one-time dev environment setup for Jasmine on macOS (Apple Silicon + Intel).
 #
 # Installs nothing globally; it checks the toolchain, adds the Rust targets we
 # ship for, and pulls JS + Cargo deps. Re-runnable any time.
@@ -58,11 +58,11 @@ ok "JS dependencies installed"
 info "warming the Cargo cache (cargo fetch)"
 ( cd src-tauri && cargo fetch >/dev/null ) && ok "Cargo dependencies fetched"
 
-# ── Codex CLI (not bundled — Cameo drives the user's own, authenticated copy) ──
+# ── Codex CLI (not bundled — Jasmine drives the user's own, authenticated copy) ──
 if command -v codex >/dev/null 2>&1; then
   ok "codex found: $(command -v codex)"
 else
-  warn "codex CLI not on PATH. Cameo needs it at runtime (it is NOT bundled):"
+  warn "codex CLI not on PATH. Jasmine needs it at runtime (it is NOT bundled):"
   warn "    npm i -g @openai/codex   # or your installer of choice"
   warn "    codex login              # ChatGPT subscription auth (no API key)"
 fi

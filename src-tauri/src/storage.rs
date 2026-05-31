@@ -1,4 +1,4 @@
-//! Atomic load/save of `<folder>/.cameo/board.json`.
+//! Atomic load/save of the Board sidecar `board.json`.
 
 use crate::model::{BoardDoc, BoardMeta};
 use crate::paths::{board_doc_path, board_meta_path};

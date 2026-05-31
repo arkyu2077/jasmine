@@ -1,5 +1,5 @@
 [package]
-name = "cameo"
+name = "jasmine"
 version = "0.1.5"
 description = "An image-first canvas for your local Codex agent."
 authors = ["Ethan L <myagents.io@gmail.com>"]
@@ -9,7 +9,7 @@ edition = "2021"
 rust-version = "1.80"
 
 [lib]
-name = "cameo_lib"
+name = "jasmine_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

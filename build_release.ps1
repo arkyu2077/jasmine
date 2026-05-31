@@ -1,6 +1,6 @@
 # build_release.ps1 — production Windows build: an NSIS installer (x64).
 #
-# Cameo bundles no sidecar (it drives the user's own `codex` CLI), so this just
+# Jasmine bundles no sidecar (it drives the user's own `codex` CLI), so this just
 # builds the app and wraps it in a per-user NSIS installer. The installer pulls
 # the WebView2 runtime automatically when it is missing.
 #
@@ -204,7 +204,7 @@ if ($LASTEXITCODE -ne 0) { Die "typecheck failed" }
 $start = Get-Date
 
 # -- build NSIS installer + updater payload ----------------------------------
-# `nsis` produces the user-visible installer .exe (Cameo_<ver>_x64-setup.exe).
+# `nsis` produces the user-visible installer .exe (Jasmine_<ver>_x64-setup.exe).
 # We disable Tauri's automatic updater artifact signing for Windows because an
 # empty updater-key password can fall back to an interactive prompt in this
 # toolchain. The script zips and signs the updater payload explicitly below.
@@ -217,7 +217,7 @@ $script:TauriBuildExitCode = 0
 Invoke-TauriReleaseBuild
 $buildCode = $script:TauriBuildExitCode
 if ($buildCode -ne 0) {
-  $releaseExe = Join-Path $PSScriptRoot "src-tauri\target\$Target\release\cameo.exe"
+  $releaseExe = Join-Path $PSScriptRoot "src-tauri\target\$Target\release\jasmine.exe"
   if (Test-Path $releaseExe) {
     Warn "tauri build failed after the release exe was produced; NSIS bundling may have hit a corrupt cache or GitHub download timeout"
     Repair-NsisTauriUtilsCache

@@ -1,5 +1,5 @@
 /**
- * Cameo auto-updater bridge.
+ * Jasmine auto-updater bridge.
  *
  * Subscribes to the Rust updater's lifecycle events and exposes:
  *   - `pendingVersion`: non-null when there's a downloaded update ready to

@@ -1,4 +1,4 @@
-//! Board data model — the serde shapes that persist in `<folder>/.cameo/board.json`
+//! Board data model — the serde shapes that persist in the Board sidecar.
 //! and cross the IPC boundary to the frontend.
 //!
 //! Invariants (PRD §4, decisions D6):
@@ -136,7 +136,7 @@ impl Default for BoardDoc {
     }
 }
 
-/// `<folder>/.cameo/meta.json` — per-Board identity + runtime + active session.
+/// Board sidecar `meta.json` — per-Board identity + runtime + active session.
 /// `board_id` is a STABLE persisted id (generated once): renaming the folder or
 /// the workspace name never changes it, so image URLs / board.json / sessions
 /// stay valid. `thread_id` is the legacy single-session token (migrated into

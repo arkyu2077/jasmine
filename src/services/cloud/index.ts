@@ -1,11 +1,11 @@
 /**
  * Cloud service entry — single source of truth for "is the cloud module
- * compiled in?" + the auth'd fetch wrapper used by every cameo.ink request.
+ * compiled in?" + the auth'd fetch wrapper used by every cloud request.
  *
  * Two build-time env vars (Vite inlines them at compile time):
  *
- *   VITE_CAMEO_API_BASE   — e.g. https://cameo.ink
- *   VITE_CAMEO_API_KEY    — the key shared by all official builds of this
+ *   VITE_JASMINE_API_BASE — service base URL
+ *   VITE_JASMINE_API_KEY  — the key shared by all official builds of this
  *                            release; revocable server-side.
  *
  * Both unset (open-source `pnpm tauri build`) → `CLOUD_ENABLED === false`.
@@ -15,10 +15,12 @@
 
 import { ipc } from "../../lib/ipc";
 
-export const CLOUD_API_BASE = import.meta.env.VITE_CAMEO_API_BASE as
+export const CLOUD_API_BASE = (import.meta.env.VITE_JASMINE_API_BASE ??
+  import.meta.env.VITE_CAMEO_API_BASE) as
   | string
   | undefined;
-export const CLOUD_API_KEY = import.meta.env.VITE_CAMEO_API_KEY as
+export const CLOUD_API_KEY = (import.meta.env.VITE_JASMINE_API_KEY ??
+  import.meta.env.VITE_CAMEO_API_KEY) as
   | string
   | undefined;
 export const CLOUD_ENABLED = !!CLOUD_API_BASE && !!CLOUD_API_KEY;

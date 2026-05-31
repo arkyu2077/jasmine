@@ -150,7 +150,9 @@ pub fn import_bytes(
 /// They're only needed during an in-flight turn (Codex reads them mid-turn); any
 /// left behind are junk, since nothing else cleans them up. Called on Board open.
 pub fn sweep_overlays(folder: &Path) {
-    let Ok(rd) = std::fs::read_dir(folder) else { return };
+    let Ok(rd) = std::fs::read_dir(folder) else {
+        return;
+    };
     for entry in rd.flatten() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
@@ -160,7 +162,7 @@ pub fn sweep_overlays(folder: &Path) {
     }
 }
 
-/// Top-level image files in the folder (skips hidden / `.cameo`). Relative names.
+/// Top-level image files in the folder (skips hidden app state). Relative names.
 pub fn scan_images(folder: &Path) -> Vec<String> {
     let mut out = Vec::new();
     if let Ok(rd) = std::fs::read_dir(folder) {

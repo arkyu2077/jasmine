@@ -1,24 +1,24 @@
-//! Anonymous install identity — `~/.cameo/device_id`.
+//! Anonymous install identity — app data `device_id`.
 //!
 //! A random UUID v4 generated on first launch and persisted as a plain-text
-//! file (one line, no JSON wrapper). The id is sent to the Cameo cloud API as
+//! file (one line, no JSON wrapper). The id is sent to the Jasmine cloud API as
 //! `X-Device-Id` to register the install and to gate per-device rate limits
 //! on Gallery requests. It is **not** tied to any account, hardware id, IP, or
-//! filesystem path — reinstalling Cameo or deleting the file mints a new id.
+//! filesystem path — reinstalling Jasmine or deleting the file mints a new id.
 //!
 //! Storage is deliberately separate from `config.json`:
 //!   - Identity vs. preferences are different concerns;
 //!   - Users may reset their settings without losing identity;
 //!   - "Reset device id" is a single rm of one file.
 
-use crate::paths::cameo_data_dir;
+use crate::paths::jasmine_data_dir;
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use uuid::Uuid;
 
 fn device_id_path() -> PathBuf {
-    cameo_data_dir().join("device_id")
+    jasmine_data_dir().join("device_id")
 }
 
 /// In-process cache so we hit disk at most once per launch.

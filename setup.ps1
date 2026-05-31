@@ -1,4 +1,4 @@
-# setup.ps1 — one-time dev environment setup for Cameo on Windows (x64).
+# setup.ps1 — one-time dev environment setup for Jasmine on Windows (x64).
 #
 # Checks the toolchain (Rust + MSVC + Node/pnpm + WebView2), adds the Rust
 # target we ship for, and pulls JS + Cargo deps. Re-runnable any time.
@@ -66,11 +66,11 @@ Push-Location src-tauri; cargo fetch | Out-Null; Pop-Location
 if ($LASTEXITCODE -ne 0) { Die "cargo fetch failed" }
 Ok "Cargo dependencies fetched"
 
-# -- Codex CLI (not bundled - Cameo drives the user's own, authenticated copy)
+# -- Codex CLI (not bundled - Jasmine drives the user's own, authenticated copy)
 if (Have codex) {
   Ok ("codex found: {0}" -f (Get-Command codex).Source)
 } else {
-  Warn "codex CLI not on PATH. Cameo needs it at runtime (it is NOT bundled):"
+  Warn "codex CLI not on PATH. Jasmine needs it at runtime (it is NOT bundled):"
   Warn "    npm i -g @openai/codex"
   Warn "    codex login              # ChatGPT subscription auth (no API key)"
 }
@@ -80,6 +80,6 @@ Ok "setup complete"
 Write-Host ""
 Write-Host "  next:"
 Write-Host "    pnpm tauri dev          # live dev with hot reload"
-Write-Host "    .\build_dev.ps1         # build an unsigned debug cameo.exe"
+Write-Host "    .\build_dev.ps1         # build an unsigned debug jasmine.exe"
 Write-Host "    .\build_release.ps1     # build the NSIS release installer"
 Write-Host ""

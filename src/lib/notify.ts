@@ -12,7 +12,7 @@ export async function notifyTurnDone(body: string): Promise<void> {
       permission = await isPermissionGranted();
       if (!permission) permission = (await requestPermission()) === "granted";
     }
-    if (permission) sendNotification({ title: "Cameo", body });
+    if (permission) sendNotification({ title: "Jasmine", body });
   } catch {
     /* notifications are best-effort */
   }

@@ -6,7 +6,7 @@
 #   ./build_dev.sh -o       # ...and launch it
 #   ./build_dev.sh --clean  # cargo clean first (full rebuild)
 #
-# Output: src-tauri/target/debug/bundle/macos/Cameo.app
+# Output: src-tauri/target/debug/bundle/macos/Jasmine.app
 # Windows: use build_dev.ps1 instead.
 
 set -euo pipefail
@@ -30,7 +30,7 @@ cd "$ROOT"
 command -v pnpm  >/dev/null || { echo "✗ pnpm not on PATH"; exit 1; }
 command -v cargo >/dev/null || { echo "✗ cargo not on PATH"; exit 1; }
 
-# Load .env so VITE_CAMEO_API_KEY (cloud features) and TAURI_SIGNING_PRIVATE_KEY
+# Load .env so VITE_JASMINE_API_KEY (cloud features) and TAURI_SIGNING_PRIVATE_KEY
 # (if someone runs an updater-flagged build) are available. Empty vars are
 # unset so codesign/Tauri don't try to use them.
 if [[ -f .env ]]; then
@@ -44,10 +44,10 @@ if [[ -f .env ]]; then
 fi
 
 # ---- kill anything running ------------------------------------------------
-echo "→ stopping running Cameo / dev server / codex sidecar"
+echo "→ stopping running Jasmine / dev server / codex sidecar"
 pkill -f "tauri dev"                 2>/dev/null || true
-pkill -f "target/debug/cameo"        2>/dev/null || true
-pkill -f "Cameo.app/Contents/MacOS"  2>/dev/null || true
+pkill -f "target/debug/jasmine"        2>/dev/null || true
+pkill -f "Jasmine.app/Contents/MacOS"  2>/dev/null || true
 pkill -f "codex app-server"          2>/dev/null || true
 lsof -ti:1420 2>/dev/null | xargs kill -9 2>/dev/null || true
 sleep 0.5
@@ -66,7 +66,7 @@ start_ts=$(date +%s)
 echo "→ pnpm tauri build --debug --bundles app"
 pnpm tauri build --debug --bundles app
 
-bundle="$ROOT/src-tauri/target/debug/bundle/macos/Cameo.app"
+bundle="$ROOT/src-tauri/target/debug/bundle/macos/Jasmine.app"
 [[ -d "$bundle" ]] || { echo "✗ bundle not produced at $bundle" >&2; exit 1; }
 
 echo ""
@@ -80,6 +80,6 @@ echo "  or run:  open \"$bundle\""
 echo ""
 
 if [[ "$OPEN" -eq 1 ]]; then
-  echo "→ launching Cameo.app"
+  echo "→ launching Jasmine.app"
   open "$bundle"
 fi

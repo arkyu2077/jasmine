@@ -19,7 +19,7 @@ import { useFileImport } from "../lib/useFileImport";
  *
  * React renders this once; the canvas is driven imperatively.
  */
-export function CameoCanvas() {
+export function JasmineCanvas() {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<CanvasScene | null>(null);
   const barRef = useRef<HTMLDivElement>(null);

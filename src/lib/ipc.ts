@@ -90,6 +90,8 @@ export const ipc = {
   // Sessions
   listSessions: (boardId: string) => invoke<SessionsDoc>("list_sessions", { boardId }),
   newSession: (boardId: string) => invoke<string>("new_session", { boardId }),
+  prepareRuntimeSession: (boardId: string, title: string) =>
+    invoke<string>("prepare_runtime_session", { boardId, title }),
   switchSession: (boardId: string, sessionId: string) =>
     invoke<void>("switch_session", { boardId, sessionId }),
   renameSession: (boardId: string, sessionId: string, title: string) =>
@@ -102,7 +104,7 @@ export const ipc = {
     invoke<void>("respond_permission", { boardId, requestId, accept }),
   stopSession: (boardId: string) => invoke<void>("stop_session", { boardId }),
 
-  // App config (global ~/.cameo/config.json) + diagnostics
+  // App config (global ~/.jasmine/config.json, legacy ~/.cameo supported) + diagnostics
   cfgLoad: () => invoke<AppConfig>("cfg_load"),
   cfgSave: (config: AppConfig) => invoke<void>("cfg_save", { config }),
   probeProxy: (protocol: ProxySettings["protocol"], host: string, port: number) =>
@@ -110,7 +112,7 @@ export const ipc = {
   probeCodexNetwork: () => invoke<ProxyProbeResult>("probe_codex_network"),
   /** Anonymous install identity (UUID v4). Generated on first call. */
   deviceIdGet: () => invoke<string>("device_id_get"),
-  /** Wipe ~/.cameo/device_id; next launch mints a new one. */
+  /** Wipe the local device_id; next launch mints a new one. */
   deviceIdReset: () => invoke<void>("device_id_reset"),
   openLogsDir: () => invoke<void>("open_logs_dir"),
   /** PNG bytes of the clipboard image, or null if none. */
@@ -123,7 +125,7 @@ export const ipc = {
   // ── Chat-text-embedded image references ───────────────────────────────────
   /** Classify a path string the AI emitted in chat text. Returns whether
    *  it's a real image, whether it lives in the current workspace, the
-   *  workspace-relative path (for in-workspace renders via the Cameo image
+   *  workspace-relative path (for in-workspace renders via the Jasmine image
    *  protocol) and a base64 thumb (for out-of-workspace renders). */
   resolveChatImage: (boardId: string, rawPath: string) =>
     invoke<ChatImageResolution>("resolve_chat_image", { boardId, rawPath }),
@@ -150,4 +152,4 @@ export interface ChatImageResolution {
   error: string | null;
 }
 
-export { cameoUrl } from "./cameo-url";
+export { jasmineUrl } from "./jasmine-url";

@@ -42,7 +42,7 @@ const PROBE_TARGET_PORT: u16 = 80;
 const PROBE_CONNECT_TIMEOUT_MS: u64 = 1_500;
 const PROBE_HANDSHAKE_TIMEOUT_MS: u64 = 5_000;
 const PROBE_RESPONSE_HEAD_MAX_BYTES: usize = 4096;
-const PROBE_USER_AGENT: &str = "Cameo-Proxy-Probe/1.0";
+const PROBE_USER_AGENT: &str = "Jasmine-Proxy-Probe/1.0";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxySettings {

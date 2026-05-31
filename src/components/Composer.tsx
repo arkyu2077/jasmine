@@ -5,7 +5,7 @@ import { useT } from "../i18n/locale";
 import { useBoardStore } from "../store/board";
 import { useChatStore } from "../store/chat";
 import { useComposerStore } from "../store/composer";
-import { cameoUrl, ipc } from "../lib/ipc";
+import { jasmineUrl, ipc } from "../lib/ipc";
 import { buildOverlays, buildMarkNotes, annotatedImages } from "../lib/overlay";
 import { GalleryButton } from "./gallery/GalleryButton";
 
@@ -53,7 +53,7 @@ export function Composer() {
     const { placements, assets, boardId } = useBoardStore.getState();
     const p = placements.get(pid);
     const a = p && assets.get(p.assetId);
-    return a && boardId ? { path: a.path, url: cameoUrl(boardId, a.path) } : null;
+    return a && boardId ? { path: a.path, url: jasmineUrl(boardId, a.path) } : null;
   };
 
   const makePill = (pid: string, ghost: boolean): HTMLSpanElement => {

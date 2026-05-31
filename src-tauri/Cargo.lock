@@ -532,47 +532,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cameo"
-version = "0.1.5"
-dependencies = [
- "anyhow",
- "arboard",
- "base64 0.22.1",
- "blake3",
- "chrono",
- "dirs 5.0.1",
- "image",
- "libc",
- "mime_guess",
- "nanoid",
- "nix",
- "notify",
- "notify-debouncer-mini",
- "once_cell",
- "parking_lot",
- "regex",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
- "tauri-plugin-process",
- "tauri-plugin-updater",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "urlencoding",
- "uuid",
- "which",
-]
-
-[[package]]
 name = "camino"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2263,6 +2222,47 @@ name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
+name = "jasmine"
+version = "0.1.5"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "base64 0.22.1",
+ "blake3",
+ "chrono",
+ "dirs 5.0.1",
+ "image",
+ "libc",
+ "mime_guess",
+ "nanoid",
+ "nix",
+ "notify",
+ "notify-debouncer-mini",
+ "once_cell",
+ "parking_lot",
+ "regex",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "tauri-plugin-process",
+ "tauri-plugin-updater",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "urlencoding",
+ "uuid",
+ "which",
+]
 
 [[package]]
 name = "javascriptcore-rs"

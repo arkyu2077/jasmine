@@ -3,7 +3,7 @@ import { Copy, FileText, FolderOpen, Image, ImagePlus, Maximize } from "lucide-r
 import { useChatStore } from "../store/chat";
 import { useBoardStore } from "../store/board";
 import { useComposerStore } from "../store/composer";
-import { cameoUrl, ipc } from "../lib/ipc";
+import { jasmineUrl, ipc } from "../lib/ipc";
 import { useAssetObjectUrl } from "../lib/asset-url";
 import { useT } from "../i18n/locale";
 
@@ -12,7 +12,7 @@ import { useT } from "../i18n/locale";
  *
  *   • not yet resolved / pending → small placeholder card with the basename
  *   • missing (file gone / not an image) → strikethrough basename, no image
- *   • in-workspace → thumbnail via the Cameo image protocol
+ *   • in-workspace → thumbnail via the Jasmine image protocol
  *   • out-of-workspace → base64 thumb data URL from `resolveChatImage`
  *
  * Right-click → context menu that bridges the chat artifact back into the
@@ -91,7 +91,7 @@ export function ChatInlineImage({ path }: { path: string }) {
 
   if (!res) return null;
   const workspaceProtocolThumb =
-    res.inWorkspace && boardId && res.workspaceRelPath ? cameoUrl(boardId, res.workspaceRelPath) : "";
+    res.inWorkspace && boardId && res.workspaceRelPath ? jasmineUrl(boardId, res.workspaceRelPath) : "";
   const thumbSrc = res.inWorkspace ? workspaceAssetThumb ?? workspaceProtocolThumb : res.thumbDataUrl ?? "";
 
   // Resolved → render as an actual visible thumbnail (not a chip). Right-click

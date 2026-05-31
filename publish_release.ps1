@@ -112,7 +112,7 @@ if ($pkgVer -eq $confVer -and $confVer -eq $cargoVer) {
   Die "version mismatch: package.json=$pkgVer tauri.conf.json=$confVer Cargo.toml=$cargoVer"
 }
 $PubDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-$Notes = "Cameo v$Version"
+$Notes = "Jasmine v$Version"
 $DownloadBase = "https://r.cameo.ink/release/v$Version"
 
 # -- locate artifacts --------------------------------------------------------
@@ -120,7 +120,7 @@ $nsisDir = Join-Path $PSScriptRoot "src-tauri\target\$Target\release\bundle\nsis
 if (-not (Test-Path $nsisDir)) { Die "no Windows bundle at $nsisDir - run .\build_release.ps1 first" }
 
 # Manifests are written into a temp dir then uploaded.
-$manifestDir = Join-Path ([System.IO.Path]::GetTempPath()) ("cameo-pub-" + [System.IO.Path]::GetRandomFileName())
+$manifestDir = Join-Path ([System.IO.Path]::GetTempPath()) ("jasmine-pub-" + [System.IO.Path]::GetRandomFileName())
 New-Item -ItemType Directory -Path $manifestDir -Force | Out-Null
 
 # Track files we'll upload as { Src; Dst } records.
@@ -238,7 +238,7 @@ Queue $exe.FullName "release/v$Version/$($exe.Name)"
 $ghFiles += $exe.FullName  # also publish the installer to the GitHub release
 Ok "  installer: $($exe.Name)"
 
-# Website download manifest (latest_win.json) -> R2. cameo_web's download button
+# Website download manifest (latest_win.json) -> R2. Jasmine website's download button
 # fetches this from R2; url -> the R2 installer object.
 $latestWin = Join-Path $manifestDir 'latest_win.json'
 $latestJson = @"
@@ -319,10 +319,10 @@ if ((Get-Command gh -ErrorAction SilentlyContinue) -and $ghFiles.Count -gt 0) {
   $tag = "v$Version"
   Info "GitHub release: $ghRepo@$tag"
   & git rev-parse -q --verify "refs/tags/$tag" *> $null
-  if ($LASTEXITCODE -ne 0) { & git tag -a $tag -m "Cameo $tag"; & git push origin $tag; Ok "tagged $tag" }
+  if ($LASTEXITCODE -ne 0) { & git tag -a $tag -m "Jasmine $tag"; & git push origin $tag; Ok "tagged $tag" }
   else { Ok "tag $tag already exists" }
   & gh release view $tag *> $null
-  if ($LASTEXITCODE -ne 0) { & gh release create $tag --title "Cameo $tag" --notes "$Notes" --verify-tag; Ok "created GitHub release $tag" }
+  if ($LASTEXITCODE -ne 0) { & gh release create $tag --title "Jasmine $tag" --notes "$Notes" --verify-tag; Ok "created GitHub release $tag" }
   Info "uploading $($ghFiles.Count) GitHub release asset(s) - this may take a while"
   & gh release upload $tag @ghFiles --clobber
   if ($LASTEXITCODE -eq 0) { Ok "uploaded $($ghFiles.Count) installer mirror asset(s) -> GitHub Release" }

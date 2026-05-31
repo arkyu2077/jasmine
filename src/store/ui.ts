@@ -36,7 +36,7 @@ interface UiState {
   /** Minimap visibility (default hidden, toggled from the HUD). */
   minimapVisible: boolean;
   toggleMinimap: () => void;
-  /** Imperative canvas zoom hook registered by CameoCanvas while the scene exists. */
+  /** Imperative canvas zoom hook registered by JasmineCanvas while the scene exists. */
   canvasZoom: ((direction: CanvasZoomDirection) => void) | null;
   setCanvasZoom: (handler: ((direction: CanvasZoomDirection) => void) | null) => void;
   /** Floating AI panel visibility (toggled from the topbar, like the sidebar). */

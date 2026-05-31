@@ -18,7 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { CameoCanvas } from "./canvas/CameoCanvas";
+import { JasmineCanvas } from "./canvas/JasmineCanvas";
 import { ChatPanel } from "./components/ChatPanel";
 import { Sidebar } from "./components/Sidebar";
 import { SettingsModal } from "./components/SettingsModal";
@@ -69,7 +69,7 @@ function TopBar({ onOpenSettings }: { onOpenSettings: () => void }) {
         <PanelLeft size={16} />
       </button>
       <span className="cm-topbar__title" data-tauri-drag-region>
-        Cameo
+        Jasmine
       </span>
       {name ? (
         <span className="cm-topbar__folder" title={folder ?? undefined} data-tauri-drag-region>
@@ -250,7 +250,7 @@ function EmptyState() {
   return (
     <div className="cm-empty">
       <div className="cm-empty__card">
-        <div className="cm-empty__mark">Cameo</div>
+        <div className="cm-empty__mark">Jasmine</div>
         <p className="cm-empty__lead">{t("empty.lead")}</p>
         <button
           className="cm-btn cm-btn--primary"
@@ -271,8 +271,8 @@ export default function App() {
   const didInit = useRef(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const chatOpen = useUiStore((s) => s.chatOpen);
-  // Bumped when settings are saved → restart the active session so a new proxy
-  // (injected at sidecar spawn) takes effect.
+  // Bumped when runtime settings are saved → restart the active session so
+  // provider/proxy values injected at sidecar spawn take effect.
   const restartNonce = useSettingsStore((s) => s.restartNonce);
   useCodexEvents();
 
@@ -310,6 +310,7 @@ export default function App() {
     chat.reset();
     void (async () => {
       try {
+        void ipc.frontLog("info", `runtime: preparing session for board ${startedBoardId}`);
         // Timeline history is Board/Session state, not Codex process state.
         // Load it before starting the sidecar so a Codex startup failure does
         // not blank the chat panel.
@@ -321,17 +322,22 @@ export default function App() {
           if (delayMs > 0) await wait(delayMs);
           if (!isCurrentStart()) return;
           try {
+            void ipc.frontLog("info", `runtime: start_session attempt for board ${startedBoardId}`);
             await ipc.startSession(startedBoardId);
             lastStartError = null;
             break;
           } catch (e) {
             lastStartError = e;
+            void ipc.frontLog(
+              "warn",
+              `runtime: start_session failed: ${e instanceof Error ? e.message : String(e)}`,
+            );
           }
         }
         if (lastStartError) throw lastStartError;
         if (!isCurrentStart()) return;
         useChatStore.getState().setSessionStatus("ready");
-        // Headless e2e hook: auto-send a prompt if CAMEO_TEST_PROMPT is set.
+        // Headless e2e hook: auto-send a prompt if JASMINE_TEST_PROMPT is set.
         const testPrompt = await ipc.initialTestPrompt();
         if (!isCurrentStart()) return;
         if (testPrompt) {
@@ -362,7 +368,11 @@ export default function App() {
           }
         }
       } catch (e) {
-        if (isCurrentStart()) useChatStore.getState().setSessionStatus("error", String(e));
+        if (isCurrentStart()) {
+          const message = String(e);
+          void ipc.frontLog("error", `runtime: session startup failed: ${message}`);
+          useChatStore.getState().setSessionStatus("error", message);
+        }
       }
     })();
     return () => {
@@ -377,7 +387,7 @@ export default function App() {
       <div className="cm-main">
         <Sidebar />
         <div className="cm-canvasarea">
-          <CameoCanvas />
+          <JasmineCanvas />
           {boardId && <Toolbar />}
           <Hud />
         </div>

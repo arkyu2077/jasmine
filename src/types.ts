@@ -77,6 +77,9 @@ export interface WorkspaceEntry {
 export interface SessionMeta {
   id: string;
   threadId: string | null;
+  providerKey?: string | null;
+  providerName?: string | null;
+  providerKind?: "codex" | "external" | string | null;
   title: string;
   createdAt: number;
   updatedAt: number;
@@ -85,6 +88,7 @@ export interface SessionMeta {
 export interface SessionsDoc {
   activeSessionId: string | null;
   sessions: SessionMeta[];
+  currentProviderKey?: string | null;
 }
 
 export interface ImportResult {
@@ -101,7 +105,8 @@ export interface PlacementUpdate {
   z: number;
 }
 
-// Mirrors src-tauri/src/proxy.rs ProxySettings + config.rs AppConfig.
+// Mirrors src-tauri/src/proxy.rs ProxySettings, provider.rs ProviderSettings,
+// and config.rs AppConfig.
 export interface ProxySettings {
   enabled: boolean;
   protocol: "http" | "socks5";
@@ -109,8 +114,30 @@ export interface ProxySettings {
   port: number;
 }
 
+export interface ProviderProfile {
+  id: string;
+  name: string;
+  base_url: string;
+  api_key: string;
+  model: string;
+  api_kind: "chat_completions" | "responses";
+}
+
+export interface ProviderSettings {
+  enabled: boolean;
+  active_id: string | null;
+  profiles: ProviderProfile[];
+  /** Active provider snapshot. Kept for Rust/runtime compatibility and old config migration. */
+  name: string;
+  base_url: string;
+  api_key: string;
+  model: string;
+  api_kind: "chat_completions" | "responses";
+}
+
 export interface AppConfig {
   proxy: ProxySettings;
+  provider: ProviderSettings;
   /** Disable anonymous usage telemetry (default false = telemetry enabled). */
   telemetry_opt_out: boolean;
   /** ISO date "YYYY-MM-DD" of the last app_open event we sent. */

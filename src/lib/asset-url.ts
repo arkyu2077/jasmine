@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cameoUrl, ipc } from "./ipc";
+import { jasmineUrl, ipc } from "./ipc";
 
 function loadImageUrl(url: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -18,7 +18,7 @@ export function loadAssetObjectUrl(boardId: string, relPath: string, mime = "ima
 }
 
 export function loadAssetImage(boardId: string, relPath: string, mime = "image/png"): Promise<HTMLImageElement> {
-  const protocolUrl = cameoUrl(boardId, relPath);
+  const protocolUrl = jasmineUrl(boardId, relPath);
   return loadImageElement(protocolUrl).catch(async () => {
     const objectUrl = await loadAssetObjectUrl(boardId, relPath, mime);
     try {
@@ -51,7 +51,7 @@ export function useAssetObjectUrl(boardId: string | null, relPath: string | null
     let live = true;
     let createdObjectUrl: string | null = null;
     setUrl(null);
-    const protocolUrl = cameoUrl(boardId, relPath);
+    const protocolUrl = jasmineUrl(boardId, relPath);
     void (async () => {
       try {
         await loadImageUrl(protocolUrl);

@@ -1,4 +1,4 @@
-# AGENTS.md — Cameo
+# AGENTS.md — Jasmine
 
 > 本文件为 Codex（及其它 AI agent）在本仓库工作时的核心指引。**新 session 请先完整
 > 读它，再看 [`specs/`](./specs/)**。这里只放：当前现状 + 已锁定决策 + 工作纪律。
@@ -7,19 +7,19 @@
 
 ---
 
-## 项目：Cameo
+## 项目：Jasmine
 
 > **An image-first canvas for your local Codex agent.**
 > 你指着图说话，Codex 来生成和修改，结果在画布上铺开。
 
-- **一句话**：Cameo 是一个 **image-first 原生桌面工具**，把本地 **Codex** agent 的生图 / 改图
+- **一句话**：Jasmine 是一个 **image-first 原生桌面工具**，把本地 **Codex** agent 的生图 / 改图
   能力，装进一个"指着图说话"的空间画布里。**它是 Codex 的手和眼，不是它的脑子** —— 不做模型、
   不做内容服务、不在 agent 层做编排。
 - **仓库**：https://github.com/hAcKlyc/cameo · 主分支 `main` · 协议 **AGPL-3.0**。
 - **状态**：**v1 已实现并以 0.1.0 开源发布**。打包跨 macOS（Apple Silicon + Intel）+ Windows；
   设计系统浅色 + 红色（DESIGN.md v1.0.0）已全面落地；Codex sidecar 运行时 + 多会话 + 标注
   overlay + 血缘 + 限流面板 + Gallery + 自动更新 + 托盘都在线。Codex CLI 用用户自己已登录的
-  那份，Cameo 不打包、不卖 token。
+  那份，Jasmine 不打包、不卖 token。
 - **运行**：`pnpm install && pnpm tauri dev`（需要 `codex login` 过的 Codex CLI）。完整下载 /
   打包步骤见 [`README.md`](./README.md)。
 
@@ -48,7 +48,7 @@
 1. **不在 agent 层做事。** 生成 / 理解 / 意图澄清交给 Codex。
 2. **两个语义域，各管各的**
    - **Agent（Codex session）** 管：对话/创作语义 + 连续性（**stateful，会反问**）。
-   - **App（Cameo）** 管：制品 + 空间语义（文件身份、布局、文件夹同步、引用注入）。
+   - **App（Jasmine）** 管：制品 + 空间语义（文件身份、布局、文件夹同步、引用注入）。
 3. **三个真相源**：Folder（制品，= agent cwd）/ Board doc（空间投影 + 标记 + 布局）/ Session
    （连续对话，Codex 持有；App 仅镜像 threadId + 消息时间线）。
 4. **一切非破坏**：原图永不被改写；每次产出 = 新 Asset + 一条血缘。
@@ -91,10 +91,10 @@
 | Runtime | v1 仅 Codex，抽象保留可换（Gemini 后续）|
 | 反问 | **允许并展示** agent 的 clarifying / approval |
 | 对话粒度 | per-Board 一条连续 session（非 per-image chat）|
-| 存储 | 注册表 / 全局名 → `~/.cameo/`，画布状态 + 血缘 → folder sidecar `.cameo/` |
+| 存储 | 注册表 / 全局名 → `~/.jasmine/`，画布状态 + 血缘 → folder sidecar `.jasmine/` |
 | 引用 | v1 走文件路径，agent 自读，不挂传图 |
 | 鉴权 | `~/.codex` ChatGPT 订阅，**无 API key** |
-| 云 | 编译期开关（`VITE_CAMEO_API_*`），开源 fork 默认无云 |
+| 云 | 编译期开关（`VITE_JASMINE_API_*`），开源 fork 默认无云 |
 | 协议 | AGPL-3.0 |
 
 ### 有人（包括未来的 AI）提议以下，请先 push back
@@ -122,7 +122,7 @@
   （`src/types.ts`），handler 走 `src/store/chat.ts::handleEvent`；wire form 用 serde
   camelCase。
 - 画布：复用 `src/canvas/scene.ts` 现有原语；不要在 React 里直接画画布。
-- 存储：动 `.cameo/` 布局或 `BoardDoc` shape → versioned change + 迁移函数。
+- 存储：动 `.jasmine/` 布局或 `BoardDoc` shape → versioned change + 迁移函数。
 - 子进程：清理走 `kill_tree`（unix `nix` / win `taskkill /T /F`）；PATH 用
   `std::env::join_paths`；打开文件管理器 / 揭示文件用 `tauri_plugin_opener`。
 - 云：保持编译期短路，开源 fork **默认无云能力**。
@@ -134,8 +134,8 @@
 
 ### 日志
 - 用 `tracing::info!(module = "…", …)`，不要 `println!` / `eprintln!`。
-- 看日志：设置弹窗里「打开日志文件夹」，或 `tail -f ~/.cameo/logs/cameo.*.log`；要更细 →
-  `RUST_LOG=cameo_lib=trace pnpm tauri dev`。
+- 看日志：设置弹窗里「打开日志文件夹」，或 `tail -f ~/.jasmine/logs/jasmine.*.log`；要更细 →
+  `RUST_LOG=jasmine_lib=trace pnpm tauri dev`。
 
 ### 完成前自检
 ```bash
@@ -150,7 +150,7 @@ pnpm tauri dev                  # 有 UI 改动时烟测
 
 - **Commit**：祈使句、首字母大写、无句号；有意义的改动写 body 说明 why
 - **文档**：specs 用中文（技术名词保留英文），与现有文档一致。
-- **schema / 存储**：任何动 `.cameo/` 布局或 Board doc 形状的改动都是 versioned change，加迁移函数。
+- **schema / 存储**：任何动 `.jasmine/` 布局或 Board doc 形状的改动都是 versioned change，加迁移函数。
 - **协议**：AGPL-3.0 —— 任何外部依赖 / 引入代码请确认许可证兼容。
 
 ---

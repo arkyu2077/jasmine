@@ -1,5 +1,5 @@
 /**
- * Gallery API client — thin wrappers around the Cameo cloud API's
+ * Gallery API client — thin wrappers around the Jasmine cloud API's
  * /api/v1/gallery/* + the shapes the server returns.
  *
  * List items carry the FULL prompt + every field needed by the detail view —

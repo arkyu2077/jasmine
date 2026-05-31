@@ -1,4 +1,4 @@
-//! Live smoke test of the Codex app-server protocol Cameo depends on.
+//! Live smoke test of the Codex app-server protocol Jasmine depends on.
 //!
 //! Marked `#[ignore]` — it spawns the real `codex app-server`, makes a real
 //! image-generation turn against the user's ChatGPT subscription (network +
@@ -56,7 +56,7 @@ async fn codex_image_generation_smoke() {
 
         // 1. initialize (+ initialized)
         send(&mut stdin, &json!({"jsonrpc":"2.0","id":1,"method":"initialize",
-            "params":{"clientInfo":{"name":"Cameo","title":null,"version":"0.0.1"},"capabilities":null}})).await;
+            "params":{"clientInfo":{"name":"Jasmine","title":null,"version":"0.0.1"},"capabilities":null}})).await;
         let _ = await_response!(1);
         send(&mut stdin, &json!({"jsonrpc":"2.0","method":"initialized","params":{}})).await;
 
