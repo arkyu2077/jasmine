@@ -7,10 +7,10 @@
   "author": "Ethan L <myagents.io@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hAcKlyc/cameo.git"
+    "url": "git+https://github.com/arkyu2077/jasmine.git"
   },
-  "homepage": "https://github.com/hAcKlyc/cameo#readme",
-  "bugs": "https://github.com/hAcKlyc/cameo/issues",
+  "homepage": "https://github.com/arkyu2077/jasmine#readme",
+  "bugs": "https://github.com/arkyu2077/jasmine/issues",
   "type": "module",
   "scripts": {
     "dev": "vite",

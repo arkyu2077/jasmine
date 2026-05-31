@@ -25,8 +25,6 @@
 
 **Jasmine is a native desktop canvas that gives your local Codex agent hands and eyes for image work.**
 
-Jasmine is derived from the Cameo project and keeps the same **AGPL-3.0-or-later** license.
-
 Chat is a terrible interface for images. You can't point at the corner of a photo and say "this part." You can't see three variations side by side. You can't keep the original next to the edit. Codex can already generate and edit images — but a single scrolling chat column flattens all of that into a thread you lose track of.
 
 Jasmine puts that capability into a **spatial canvas** instead. You open a folder, its images lay out on an infinite board, and you work the way you actually think about images: select one, draw a box on the part you mean, type an instruction, and the result lands **right next to the source** so the lineage is visible. The conversation stays continuous — "warmer," "now change the background," "do that to these three" — because there's one ongoing Codex session per board.
@@ -120,11 +118,15 @@ Release signing is optional and read from `.env` (macOS) — see [`.env.example`
 
 **v1 core loop built (dev).** The full path works end-to-end: open a folder → render on the canvas → mark a region → ask Codex → output lands with lineage → continue the conversation. Active development on branch `feat/v1-bootstrap`.
 
+## Acknowledgments
+
+Jasmine stands on the shoulders of **[Cameo](https://github.com/hAcKlyc/cameo)** — the project that inspired this one. Heartfelt thanks to its authors for the original vision and the groundwork Jasmine builds directly upon. In that spirit, Jasmine keeps the same **AGPL-3.0-or-later** license.
+
 ## License & disclaimer
 
 Licensed under **[AGPL-3.0-or-later](./LICENSE)**. You may use, modify, and redistribute Jasmine under its terms; if you run a modified version as a network service, the AGPL requires you to offer your source to its users.
 
-Jasmine is derived from Cameo and retains Cameo's AGPL-3.0-or-later license approach. It is an independent, unofficial tool. It drives the Codex CLI but is **not** affiliated with, endorsed by, or sponsored by OpenAI. "Codex" and related names belong to their respective owners.
+Jasmine is an independent, unofficial tool. It drives the Codex CLI but is **not** affiliated with, endorsed by, or sponsored by OpenAI. "Codex" and related names belong to their respective owners.
 
 ---
 
@@ -137,8 +139,6 @@ Jasmine is derived from Cameo and retains Cameo's AGPL-3.0-or-later license appr
 ## Jasmine 是什么？
 
 **Jasmine 是一个原生桌面画布，给你本地的 Codex agent 装上做图用的「手」和「眼」。**
-
-Jasmine 从 Cameo 项目衍生而来，并沿用相同的 **AGPL-3.0-or-later** 协议。
 
 聊天框是处理图片最糟糕的界面。你没法指着照片的某个角说「就这块」；没法把三个变体并排着看；没法让原图和改后图挨在一起对照。Codex 本来就能生图、改图——但一条不断下滚的聊天列把这一切压扁成了一根你很快就跟丢的线索。
 
@@ -233,8 +233,12 @@ pnpm tauri dev        # 启动桌面 app，热重载
 
 **v1 核心闭环已实现（dev）。** 全链路跑通：开文件夹 → 渲染到画布 → 标记区域 → 问 Codex → 产出带血缘落地 → 续聊。开发分支 `feat/v1-bootstrap`。
 
+## 致谢
+
+Jasmine 站在 **[Cameo](https://github.com/hAcKlyc/cameo)** 的肩膀上——是它启发了这个项目。特别感谢原作者们的最初构想，以及 Jasmine 直接据以构建的奠基性工作。秉承这一精神，Jasmine 沿用相同的 **AGPL-3.0-or-later** 协议。
+
 ## 许可与声明
 
-采用 **[AGPL-3.0-or-later](./LICENSE)** 许可。Jasmine 从 Cameo 衍生并沿用相同协议。你可以在其条款下使用、修改、再分发 Jasmine；若你将修改版作为网络服务运行，AGPL 要求你向其用户提供源码。
+采用 **[AGPL-3.0-or-later](./LICENSE)** 许可。你可以在其条款下使用、修改、再分发 Jasmine；若你将修改版作为网络服务运行，AGPL 要求你向其用户提供源码。
 
 Jasmine 是独立的非官方工具。它驱动 Codex CLI，但**不**隶属于 OpenAI，也未获其背书或赞助。「Codex」及相关名称归各自所有者所有。

@@ -15,7 +15,7 @@
 - **一句话**：Jasmine 是一个 **image-first 原生桌面工具**，把本地 **Codex** agent 的生图 / 改图
   能力，装进一个"指着图说话"的空间画布里。**它是 Codex 的手和眼，不是它的脑子** —— 不做模型、
   不做内容服务、不在 agent 层做编排。
-- **仓库**：https://github.com/hAcKlyc/cameo · 主分支 `main` · 协议 **AGPL-3.0**。
+- **仓库**：https://github.com/arkyu2077/jasmine · 主分支 `main` · 协议 **AGPL-3.0**。
 - **状态**：**v1 已实现并以 0.1.0 开源发布**。打包跨 macOS（Apple Silicon + Intel）+ Windows；
   设计系统浅色 + 红色（DESIGN.md v1.0.0）已全面落地；Codex sidecar 运行时 + 多会话 + 标注
   overlay + 血缘 + 限流面板 + Gallery + 自动更新 + 托盘都在线。Codex CLI 用用户自己已登录的

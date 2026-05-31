@@ -4,7 +4,7 @@ version = "0.1.5"
 description = "An image-first canvas for your local Codex agent."
 authors = ["Ethan L <myagents.io@gmail.com>"]
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/hAcKlyc/cameo"
+repository = "https://github.com/arkyu2077/jasmine"
 edition = "2021"
 rust-version = "1.80"
 
