@@ -16,10 +16,6 @@
   <a href="./LICENSE">License (AGPL-3.0)</a>
 </p>
 
-<p align="center">
-  <img src="docs/landing-en.png" width="840" alt="Jasmine — the image canvas your Codex was missing" />
-</p>
-
 ---
 
 <a id="english"></a>
@@ -33,10 +29,6 @@ Chat is a terrible interface for images. You can't point at the corner of a phot
 Jasmine puts that capability into a **spatial canvas** instead. You open a folder, its images and clips lay out on an infinite board, and you work the way you actually think: select one, draw a box on the part you mean, type an instruction, and the result lands **right next to the source** so the lineage is visible. The conversation stays continuous — "warmer," "now change the background," "do that to these three" — because there's one ongoing Codex session per board.
 
 Jasmine is **the hands and eyes, not the brain.** It does not host a model, sell tokens, or orchestrate agents. All generation and understanding stay with Codex (using your existing ChatGPT subscription — no API key). Jasmine owns only what a chat UI structurally can't: spatial layout, file identity, non-destructive lineage, and "what you're pointing at."
-
-<p align="center">
-  <img src="docs/app-en.png" width="840" alt="The Jasmine desktop app — infinite canvas on the left, a continuous Codex session on the right" />
-</p>
 
 ---
 
@@ -93,10 +85,6 @@ If `codex` isn't installed yet, see the [Codex CLI docs](https://developers.open
 3. **Mark a region** (optional). Press `R` (or pick the ▭ tool), drag a box on an image, and add a note. `V` returns to select. The mark is sent to Codex as an image overlay — so you point instead of describe.
 4. **Ask Codex.** With image(s) selected, type an instruction (or tap a preset like *Remove background*) and Send. Use the **"+"** menu to attach uploads or pick an enabled Codex plugin for the turn.
 5. **Results land to the right of the source.** Keep going — "warmer," "now change the background," "make it a 10-second clip." The session is continuous, non-destructive, and every output is a new file with visible lineage.
-
-<p align="center">
-  <img src="docs/gallery-en.png" width="840" alt="The Jasmine prompt gallery" />
-</p>
 
 ## Features
 
@@ -165,10 +153,6 @@ Jasmine is an independent, unofficial tool. It drives the Codex CLI but is **not
 
 <a id="中文"></a>
 
-<p align="center">
-  <img src="docs/landing-zh.png" width="840" alt="Jasmine — 你的 Codex，就差这块画布" />
-</p>
-
 ## Jasmine 是什么？
 
 **让 Codex 成为你的设计大脑。Jasmine 是它作画的原生桌面画布——给你本地的 Codex agent 装上做图、做视频用的「手」和「眼」。**
@@ -178,10 +162,6 @@ Jasmine is an independent, unofficial tool. It drives the Codex CLI but is **not
 Jasmine 把这份能力搬进了**空间画布**。你打开一个文件夹，里面的图和片段在无限画布上铺开，然后用你真正思考的方式去工作：选中一张、在你想改的部位画个框、敲一句指令，结果就落在**源图右边**，血缘一目了然。对话是连续的——「再暖一点」「现在换个背景」「把这三张都这么处理」——因为每个 board 对应一条持续的 Codex 会话。
 
 Jasmine 是**手和眼，不是脑子**。它不托管模型、不卖 token、不在 agent 层做编排。所有生成与理解都交给 Codex（用你已有的 ChatGPT 订阅，无需 API key）。Jasmine 只负责聊天 UI 结构上做不到的事：空间布局、文件身份、非破坏血缘，以及「你正指着什么」。
-
-<p align="center">
-  <img src="docs/app-zh.png" width="840" alt="Jasmine 桌面应用——左边无限画布，右边连续的 Codex 会话" />
-</p>
 
 ---
 
@@ -236,10 +216,6 @@ codex --version    # 确认它在 PATH 上
 3. **标记区域**（可选）。按 `R`（或选 ▭ 工具）在图上拖一个框、加备注。`V` 回到选择。标记会作为蒙层图发给 Codex——所以你是「指」，不是「描述」。
 4. **问 Codex。** 选中图后输入指令（或点「去背景」之类预设）发送。用 **「+」** 菜单可附加上传、或为这一轮挑一个已启用的 Codex 插件。
 5. **结果落在源图右侧。** 继续就好——「再暖一点」「换个背景」「做成 10 秒的片段」。会话连续、非破坏，每个产出都是带可见血缘的新文件。
-
-<p align="center">
-  <img src="docs/gallery-zh.png" width="840" alt="Jasmine 提示词画廊" />
-</p>
 
 ## 功能
 
