@@ -617,6 +617,11 @@ pub async fn start_session(
     // Inject user-configured runtime settings. Config is re-read per spawn, so
     // Settings changes apply on the next session start (the frontend restarts
     // the active session on save).
+    // Sandbox is `danger-full-access` (see new_thread_params): the agent runs
+    // with full filesystem + network access, matching the user's own Codex CLI.
+    // Chrome-based plugins (HyperFrames) can't launch under the `workspace-write`
+    // seatbelt — verified — so there's no useful middle ground; network is implied
+    // by full access, so no separate network flag is needed here.
     let external_provider_name = provider_identity
         .is_external()
         .then(|| provider_identity.name.clone());
@@ -746,7 +751,11 @@ async fn ensure_thread(
     provider: &RuntimeProviderIdentity,
 ) -> Result<String, String> {
     let dev = prompt::build_developer_instructions();
-    let (approval, sandbox) = ("never", "workspace-write");
+    // Full access (no seatbelt) so Chrome-based plugins like HyperFrames can
+    // launch — the `workspace-write` sandbox blocks Chrome's process launch even
+    // with extra writable dirs (verified). Same trust level as the user's own
+    // Codex CLI (their global config is already danger-full-access).
+    let (approval, sandbox) = ("never", "danger-full-access");
     let id = if let Some(prev) = prev {
         match inner
             .call(
@@ -995,6 +1004,7 @@ pub async fn send_message(
     text: String,
     source_placement_ids: Vec<String>,
     overlays: Vec<(String, String)>,
+    plugin: Option<String>,
 ) -> Result<(), String> {
     let session = codex_reg.get(&board_id).ok_or("session not started")?;
     let inner = &session.inner;
@@ -1015,7 +1025,7 @@ pub async fn send_message(
             return Err(e);
         }
     };
-    let prompt = build_turn_prompt(&text, &refs);
+    let prompt = build_turn_prompt(&text, &refs, plugin.as_deref());
     let input = json!([{ "type": "text", "text": prompt, "text_elements": [] }]);
 
     let active_turn_id = { inner.current_turn_id.lock().clone() };
@@ -1092,22 +1102,38 @@ pub async fn send_message(
     Ok(())
 }
 
-fn build_turn_prompt(text: &str, refs: &[(String, Option<String>)]) -> String {
-    if refs.is_empty() {
+fn build_turn_prompt(
+    text: &str,
+    refs: &[(String, Option<String>)],
+    plugin: Option<&str>,
+) -> String {
+    if refs.is_empty() && plugin.is_none() {
         return text.to_string();
     }
-    let mut s = String::from(
-        "Reference image(s) in the working directory — read these to see what I'm pointing at:\n",
-    );
-    for (clean, overlay) in refs {
-        match overlay {
-            Some(ov) => s.push_str(&format!(
-                "- {clean}  (a marking overlay showing the region/subject to change is at: {ov})\n"
-            )),
-            None => s.push_str(&format!("- {clean}\n")),
+    let mut s = String::new();
+    if !refs.is_empty() {
+        s.push_str(
+            "Reference image(s) in the working directory — read these to see what I'm pointing at:\n",
+        );
+        for (clean, overlay) in refs {
+            match overlay {
+                Some(ov) => s.push_str(&format!(
+                    "- {clean}  (a marking overlay showing the region/subject to change is at: {ov})\n"
+                )),
+                None => s.push_str(&format!("- {clean}\n")),
+            }
         }
+        s.push('\n');
     }
-    s.push('\n');
+    // Bounded preference (not a hard requirement): biases this turn toward a Codex
+    // plugin the user picked in the composer. Explicit fallback so it never blocks.
+    if let Some(p) = plugin {
+        s.push_str(&format!(
+            "Tool preference for this turn: prefer the Codex plugin \"{p}\" if it fits the task; \
+             write any output media into the working directory so it appears on the canvas. \
+             If the plugin is unavailable, say so briefly and use the best available approach.\n\n"
+        ));
+    }
     s.push_str(text);
     s
 }
@@ -2167,7 +2193,9 @@ async fn sweep_turn_outputs(inner: &Arc<CodexSessionInner>, source_ids: Vec<Stri
 
 async fn handle_server_request(inner: &Arc<CodexSessionInner>, id: u64, method: &str) {
     // With approvalPolicy=never these are rare. Surface it, then auto-accept so
-    // the turn never hangs (the workspace-write sandbox bounds the risk).
+    // the turn never hangs. NOTE: the sandbox is danger-full-access, so this
+    // auto-accept is NOT sandbox-bounded — it runs at the same trust level as the
+    // user's own Codex CLI (full filesystem + network). Accepted deliberately.
     inner.emit(UnifiedEvent::PermissionRequest {
         request_id: id,
         summary: method.to_string(),
@@ -2187,6 +2215,29 @@ mod tests {
         push_unique(&mut parts, PathBuf::from("/b"));
         push_unique(&mut parts, PathBuf::from("/a"));
         assert_eq!(parts, vec![PathBuf::from("/a"), PathBuf::from("/b")]);
+    }
+
+    #[test]
+    fn turn_prompt_plain_when_no_refs_no_plugin() {
+        assert_eq!(build_turn_prompt("hi", &[], None), "hi");
+    }
+
+    #[test]
+    fn turn_prompt_injects_bounded_plugin_preference_with_fallback() {
+        let p = build_turn_prompt("make an intro", &[], Some("hyperframes@openai-curated"));
+        assert!(p.contains("hyperframes@openai-curated"));
+        assert!(p.to_lowercase().contains("prefer")); // a preference, not a command
+        assert!(p.to_lowercase().contains("unavailable")); // explicit fallback wording
+        assert!(p.ends_with("make an intro")); // user text preserved at the end
+    }
+
+    #[test]
+    fn turn_prompt_keeps_refs_and_plugin_together() {
+        let refs = vec![("clip.mp4".to_string(), None)];
+        let p = build_turn_prompt("trim it", &refs, Some("hyperframes@openai-curated"));
+        assert!(p.contains("clip.mp4")); // ref block present
+        assert!(p.contains("hyperframes@openai-curated")); // plugin pref present
+        assert!(p.ends_with("trim it"));
     }
 
     #[test]

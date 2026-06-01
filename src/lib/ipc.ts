@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppConfig,
   CodexInfo,
+  CodexPlugin,
   Asset,
   BoardInfo,
   ImportResult,
@@ -83,8 +84,15 @@ export const ipc = {
 
   // Codex runtime
   startSession: (boardId: string) => invoke<string>("start_session", { boardId }),
-  sendMessage: (boardId: string, text: string, sources: string[], overlays: OverlayRef[]) =>
-    invoke<void>("send_message", { boardId, text, sources, overlays }),
+  sendMessage: (
+    boardId: string,
+    text: string,
+    sources: string[],
+    overlays: OverlayRef[],
+    plugin?: string,
+  ) => invoke<void>("send_message", { boardId, text, sources, overlays, plugin: plugin ?? null }),
+  /** Enabled Codex plugins from the user's ~/.codex config (read-only). */
+  listCodexPlugins: () => invoke<CodexPlugin[]>("list_codex_plugins"),
   interruptTurn: (boardId: string) => invoke<void>("interrupt_turn", { boardId }),
 
   // Sessions

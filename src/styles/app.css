@@ -1439,9 +1439,116 @@ body.cm-chat-resizing {
   background: var(--cm-gray-100);
   color: var(--cm-fg);
 }
+.cm-composer__add:active:not(:disabled) {
+  background: var(--cm-gray-200);
+  color: var(--cm-fg);
+}
 .cm-composer__add:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* "+" menu popover (upload + Codex plugin picker), anchored above the bar. */
+.cm-plugmenu {
+  position: relative;
+  line-height: 0;
+}
+.cm-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  min-width: 210px;
+  background: var(--cm-surface);
+  border: 1px solid var(--cm-line);
+  border-radius: var(--cm-radius-md);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  padding: 4px;
+  z-index: 40;
+}
+.cm-menu__item {
+  appearance: none;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--cm-fg);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: var(--cm-radius-md);
+  cursor: pointer;
+}
+.cm-menu__item:hover {
+  background: var(--cm-gray-100);
+}
+.cm-menu__item:active {
+  background: var(--cm-gray-200);
+}
+.cm-menu__item > span {
+  flex: 1;
+}
+.cm-menu__chev {
+  color: var(--cm-muted);
+}
+.cm-menu__chk {
+  color: var(--cm-accent);
+}
+.cm-menu__pname {
+  flex: 1;
+  text-transform: capitalize;
+}
+.cm-menu__sub {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--cm-divider);
+  max-height: 240px;
+  overflow-y: auto;
+}
+.cm-menu__subhead {
+  font-size: 11px;
+  color: var(--cm-muted);
+  padding: 4px 8px;
+}
+.cm-menu__note {
+  font-size: 12px;
+  color: var(--cm-muted);
+  padding: 6px 8px;
+}
+
+/* Selected-plugin preference chip in the composer bar. */
+.cm-plugchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 4px 0 8px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--cm-accent-press);
+  background: var(--cm-brand-50);
+  border: 1px solid var(--cm-brand-100);
+  border-radius: 999px;
+}
+.cm-plugchip > span {
+  text-transform: capitalize;
+}
+.cm-plugchip__x {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--cm-accent-press);
+  line-height: 0;
+  padding: 2px;
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.cm-plugchip__x:hover {
+  opacity: 1;
+  background: var(--cm-brand-100);
 }
 
 /* Rich contenteditable input with inline reference pills (3 lines → 8 max). */

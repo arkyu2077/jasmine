@@ -1,10 +1,10 @@
 {
   "name": "jasmine",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.0.1",
   "description": "An image-first canvas for your local Codex agent.",
   "license": "AGPL-3.0-or-later",
-  "author": "Ethan L <myagents.io@gmail.com>",
+  "author": "arkyu <arkyu.008@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/arkyu2077/jasmine.git"

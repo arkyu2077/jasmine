@@ -2225,7 +2225,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jasmine"
-version = "0.1.5"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "arboard",
@@ -2256,6 +2256,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
+ "toml 0.8.2",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",

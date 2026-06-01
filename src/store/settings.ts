@@ -463,4 +463,5 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       throw new Error("failed to save settings");
     }
   },
+
 }));

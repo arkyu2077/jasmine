@@ -72,12 +72,31 @@ pub fn start(app: &AppHandle, board_id: String, folder: PathBuf) {
             Err(_) => return,
         };
         for ev in events {
-            if !is_candidate(&ev.path, &cb_folder) {
-                continue;
-            }
             let Some(name) = ev.path.file_name().and_then(|n| n.to_str()).map(String::from) else {
                 continue;
             };
+            // A render request (`<base>.render.json`) → drive the motion-graphics
+            // render primitive. Top-level only, like media candidates.
+            if ev.path.parent() == Some(cb_folder.as_path())
+                && name.ends_with(crate::render::REQUEST_SUFFIX)
+            {
+                let app = cb_app.clone();
+                let board_id = cb_board.clone();
+                let folder = cb_folder.clone();
+                let path = ev.path.clone();
+                tauri::async_runtime::spawn(async move {
+                    // Wait for the JSON to finish writing (same size-stable gate as
+                    // media) so a half-written request isn't parsed as invalid.
+                    if !is_stable(&path).await {
+                        return;
+                    }
+                    crate::render::handle_render_request(&app, &board_id, &folder, &name);
+                });
+                continue;
+            }
+            if !is_candidate(&ev.path, &cb_folder) {
+                continue;
+            }
             let app = cb_app.clone();
             let board_id = cb_board.clone();
             let folder = cb_folder.clone();

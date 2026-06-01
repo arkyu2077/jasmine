@@ -1005,13 +1005,147 @@ pub async fn send_message(
     text: String,
     sources: Vec<String>,
     overlays: Vec<OverlayRef>,
+    plugin: Option<String>,
     codex: State<'_, Arc<CodexRegistry>>,
 ) -> Result<(), String> {
     let ov = overlays
         .into_iter()
         .map(|o| (o.placement_id, o.path))
         .collect();
-    codex::send_message(codex.inner().clone(), board_id, text, sources, ov).await
+    // Server-side validation: only inject a plugin preference for a real enabled
+    // plugin id. Drops arbitrary/crafted IPC strings (prompt-injection guard).
+    let plugin = plugin.filter(|id| is_valid_plugin_id(id));
+    codex::send_message(codex.inner().clone(), board_id, text, sources, ov, plugin).await
+}
+
+/// A Codex plugin the user has enabled in their `~/.codex/config.toml`. Surfaced
+/// in the composer so the user can bias a turn toward one (e.g. HyperFrames for
+/// rich motion graphics). Enumeration only — Jasmine never edits the user's config.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexPlugin {
+    /// Full config key, e.g. `hyperframes@openai-curated` (kept for identity).
+    pub id: String,
+    /// Display name (key before `@`), e.g. `hyperframes`.
+    pub name: String,
+    /// Source/marketplace (key after `@`), e.g. `openai-curated`.
+    pub source: String,
+}
+
+/// Plugins relevant to Jasmine (a video-edit agent). Other enabled Codex plugins
+/// (Documents, GitHub, Browser, …) aren't surfaced in the composer — they're not
+/// for editing media. Matched case-insensitively on the name before `@`. Extend
+/// this list as more video/media plugins become relevant.
+const RELEVANT_PLUGINS: &[&str] = &["hyperframes"];
+
+/// Parse enabled, Jasmine-relevant plugins out of a `config.toml` body. Pure (no
+/// IO) so it's unit tested. Only `enabled == true` entries in [`RELEVANT_PLUGINS`];
+/// keeps the full `name@source` id.
+fn parse_enabled_plugins(text: &str) -> Result<Vec<CodexPlugin>, String> {
+    let val: toml::Value = text.parse().map_err(|e| format!("parse config.toml: {e}"))?;
+    let mut out = Vec::new();
+    if let Some(tbl) = val.get("plugins").and_then(|p| p.as_table()) {
+        for (key, v) in tbl {
+            // Only explicitly enabled plugins (missing/false → skip).
+            if v.get("enabled").and_then(|e| e.as_bool()) != Some(true) {
+                continue;
+            }
+            let (name, source) = key
+                .split_once('@')
+                .map(|(n, s)| (n.to_string(), s.to_string()))
+                .unwrap_or_else(|| (key.clone(), String::new()));
+            // Only surface video/media-editing plugins (e.g. HyperFrames).
+            if !RELEVANT_PLUGINS.contains(&name.to_lowercase().as_str()) {
+                continue;
+            }
+            out.push(CodexPlugin {
+                id: key.clone(),
+                name,
+                source,
+            });
+        }
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(out)
+}
+
+/// Read the user's enabled+relevant Codex plugins from `~/.codex/config.toml`
+/// (honoring `CODEX_HOME` so it matches the app-server Jasmine spawns). Best-effort:
+/// missing/corrupt config → empty. Shared by the list command and `send_message`
+/// validation.
+pub fn read_enabled_plugins() -> Vec<CodexPlugin> {
+    let Some(home) = std::env::var_os("CODEX_HOME")
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|h| h.join(".codex")))
+    else {
+        return Vec::new();
+    };
+    let Ok(text) = std::fs::read_to_string(home.join("config.toml")) else {
+        return Vec::new();
+    };
+    parse_enabled_plugins(&text).unwrap_or_default()
+}
+
+/// True if `id` is a currently-enabled, Jasmine-relevant plugin. Used to validate
+/// the composer's plugin selection server-side (defense against a crafted IPC
+/// `plugin` string becoming agent instructions via the turn prompt).
+pub fn is_valid_plugin_id(id: &str) -> bool {
+    read_enabled_plugins().iter().any(|p| p.id == id)
+}
+
+/// List the user's enabled Codex plugins. Read-only; `[]` if config/`[plugins]` absent.
+#[tauri::command]
+pub fn list_codex_plugins() -> Result<Vec<CodexPlugin>, String> {
+    Ok(read_enabled_plugins())
+}
+
+#[cfg(test)]
+mod plugin_tests {
+    use super::parse_enabled_plugins;
+
+    const SAMPLE: &str = r#"
+model = "gpt-5.1"
+[mcp_servers.pencil]
+command = "x"
+[plugins."hyperframes@openai-curated"]
+enabled = true
+[plugins."github@openai-curated"]
+enabled = true
+[plugins."disabled-one@src"]
+enabled = false
+[plugins."no-flag@src"]
+foo = "bar"
+"#;
+
+    #[test]
+    fn surfaces_only_relevant_enabled_plugin_keeps_full_id() {
+        let got = parse_enabled_plugins(SAMPLE).unwrap();
+        // github is enabled too, but only hyperframes is video-relevant (allowlist).
+        let ids: Vec<_> = got.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, vec!["hyperframes@openai-curated"]);
+        assert_eq!(got[0].name, "hyperframes");
+        assert_eq!(got[0].source, "openai-curated"); // @-split
+    }
+
+    #[test]
+    fn no_plugins_table_is_empty_not_error() {
+        assert!(parse_enabled_plugins("model = \"x\"").unwrap().is_empty());
+    }
+
+    #[test]
+    fn key_without_at_keeps_name_empty_source() {
+        // hyperframes is in the allowlist; key without `@` → empty source.
+        let got = parse_enabled_plugins("[plugins.hyperframes]\nenabled = true\n").unwrap();
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].name, "hyperframes");
+        assert_eq!(got[0].source, "");
+    }
+
+    #[test]
+    fn irrelevant_enabled_plugins_are_filtered_out() {
+        let got = parse_enabled_plugins("[plugins.\"github@x\"]\nenabled = true\n").unwrap();
+        assert!(got.is_empty()); // github enabled but not video-relevant
+    }
 }
 
 /// Replace the annotation shapes for a Placement (empty clears it). Persisted.

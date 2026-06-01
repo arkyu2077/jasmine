@@ -231,6 +231,44 @@ pub fn extract_poster(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Encode a directory of zero-padded PNG frames (`frame_%05d.png`) into an H.264
+/// MP4 at `fps`. Backs the motion-graphics render primitive: Codex authors an
+/// HTML/canvas animation, Jasmine renders frames in a hidden webview, then this
+/// stitches them. `-pix_fmt yuv420p` + `+faststart` for max WebKit/WebView2
+/// compatibility (same codec the video prompt asks Codex to produce); the scale
+/// filter rounds to even dimensions (libx264/yuv420p rejects odd width/height).
+pub fn encode_frames(frame_dir: &Path, fps: f64, dest: &Path) -> Result<()> {
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+    let fps_arg = if fps > 0.0 { fps.to_string() } else { "30".to_string() };
+    let pattern = frame_dir.join("frame_%05d.png");
+    let mut cmd = Command::new(ffmpeg_path());
+    cmd.args(["-y", "-loglevel", "error", "-framerate", &fps_arg, "-i"])
+        .arg(&pattern)
+        .args([
+            "-vf",
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+        ])
+        .arg(dest);
+    hide_console_window(&mut cmd);
+    let out = cmd.output().context("spawn ffmpeg for frame encode")?;
+    if !out.status.success() {
+        return Err(anyhow!(
+            "ffmpeg frame encode exited {}: {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

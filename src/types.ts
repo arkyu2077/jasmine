@@ -1,5 +1,16 @@
 // Mirrors the Rust serde shapes in src-tauri/src/model.rs (camelCase wire form).
 
+/** A Codex plugin enabled in the user's `~/.codex/config.toml` (mirrors the Rust
+ *  `CodexPlugin`). Surfaced in the composer so a turn can be biased toward one. */
+export interface CodexPlugin {
+  /** Full config key, e.g. `hyperframes@openai-curated`. */
+  id: string;
+  /** Display name (key before `@`), e.g. `hyperframes`. */
+  name: string;
+  /** Source/marketplace (key after `@`), e.g. `openai-curated`. */
+  source: string;
+}
+
 export interface Rect {
   x: number;
   y: number;

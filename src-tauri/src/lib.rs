@@ -19,6 +19,7 @@ pub mod process;
 pub mod prompt;
 pub mod protocol;
 pub mod provider;
+pub mod render;
 pub mod provider_adapter;
 pub mod proxy;
 pub mod runtime;
@@ -46,6 +47,7 @@ pub fn run() {
     let boards: Arc<BoardRegistry> = Arc::new(BoardRegistry::default());
     let codex_reg: Arc<CodexRegistry> = Arc::new(CodexRegistry::default());
     let watchers: Arc<WatchRegistry> = Arc::new(WatchRegistry::default());
+    let renders: Arc<render::RenderRegistry> = Arc::new(render::RenderRegistry::default());
     let codex_for_exit = codex_reg.clone();
 
     let app = tauri::Builder::default()
@@ -57,6 +59,7 @@ pub fn run() {
         .manage(boards)
         .manage(codex_reg)
         .manage(watchers)
+        .manage(renders)
         .setup(|app| {
             // Auto-update is disabled until a Jasmine-owned update server is
             // configured (no `updater` endpoint in tauri.conf.json). To
@@ -96,7 +99,16 @@ pub fn run() {
             }
         })
         .register_uri_scheme_protocol("jasmine", protocol::handle_jasmine_uri)
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler({
+            // Render webviews load agent-authored HTML; restrict them to the
+            // render_* IPC so a malicious scene can't drive other app commands
+            // (read/export board files, change settings, steer the agent, …).
+            // Custom commands aren't capability-gated in Tauri 2, so gate here at
+            // the single invoke chokepoint. The Box<…Invoke<Wry>…> annotation pins
+            // the runtime so `generate_handler!` can infer its type.
+            #[allow(clippy::type_complexity)]
+            let cmd_handler: Box<dyn Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Send + Sync> =
+                Box::new(tauri::generate_handler![
             ping,
             app_version,
             front_log,
@@ -140,6 +152,7 @@ pub fn run() {
             commands::write_overlay,
             commands::start_session,
             commands::send_message,
+            commands::list_codex_plugins,
             commands::interrupt_turn,
             commands::respond_permission,
             commands::codex_auth_status,
@@ -151,7 +164,25 @@ pub fn run() {
             commands::rename_session,
             commands::load_session,
             commands::append_message,
-        ])
+            render::render_write_frame,
+            render::render_ready,
+            render::render_fail,
+                ]);
+            move |invoke| {
+                let blocked = {
+                    let cmd = invoke.message.command();
+                    invoke.message.webview_ref().label().starts_with("render-")
+                        && !cmd.starts_with("render_")
+                };
+                if blocked {
+                    invoke
+                        .resolver
+                        .reject("command not allowed from render webview");
+                    return true;
+                }
+                cmd_handler(invoke)
+            }
+        })
         .build(tauri::generate_context!())
         .expect("error building Jasmine");
 

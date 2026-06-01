@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, ArrowUp, Square } from "lucide-react";
+import { ImagePlus, ArrowUp, Square, Plus, Puzzle, ChevronRight, Check, X } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
+import type { CodexPlugin } from "../types";
 import { useT } from "../i18n/locale";
 import { useBoardStore } from "../store/board";
 import { useChatStore } from "../store/chat";
@@ -39,6 +40,65 @@ export function Composer() {
   const boardId = useBoardStore((s) => s.boardId);
   const [hasContent, setHasContent] = useState(false);
   const t = useT();
+
+  // ── "+" menu + Codex plugin picker ─────────────────────────────────────
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [showPlugins, setShowPlugins] = useState(false);
+  const [plugins, setPlugins] = useState<CodexPlugin[] | null>(null); // null = not loaded yet
+  const [pluginsErr, setPluginsErr] = useState(false);
+  const [selectedPlugin, setSelectedPlugin] = useState<CodexPlugin | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const addBtnRef = useRef<HTMLButtonElement>(null);
+
+  const closeMenu = () => {
+    setMenuOpen(false);
+    setShowPlugins(false);
+  };
+  // Close the popover on outside-click / Escape. Escape returns focus to the
+  // trigger (keyboard users); outside-click leaves focus where the user clicked.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) closeMenu();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        closeMenu();
+        addBtnRef.current?.focus();
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  const togglePlugins = () => {
+    setShowPlugins((v) => {
+      const next = !v;
+      // (Re)fetch when opening if not yet loaded — clears a prior error so a
+      // failed load can be retried by reopening the submenu.
+      if (next && plugins === null) {
+        setPluginsErr(false);
+        ipc
+          .listCodexPlugins()
+          .then(setPlugins)
+          .catch(() => setPluginsErr(true));
+      }
+      return next;
+    });
+  };
+  const pickUpload = () => {
+    closeMenu();
+    void addImages();
+  };
+  const pickPlugin = (p: CodexPlugin) => {
+    setSelectedPlugin((cur) => (cur?.id === p.id ? null : p)); // click again to deselect
+    closeMenu();
+    editorRef.current?.focus();
+  };
 
   const ready = !!boardId && sessionStatus === "ready";
   const running = turnStatus === "running";
@@ -346,7 +406,7 @@ export function Composer() {
     void (async () => {
       try {
         const overlays = await buildOverlays(boardId, allRefs);
-        await ipc.sendMessage(boardId, instruction, allRefs, overlays);
+        await ipc.sendMessage(boardId, instruction, allRefs, overlays, selectedPlugin?.id);
         // Consume marks only after the turn was actually sent (not on failure).
         useBoardStore.getState().consumeMarks(allRefs);
       } catch (e) {
@@ -457,15 +517,79 @@ export function Composer() {
           }}
         />
         <div className="cm-composer__bar">
-          <button
-            className="cm-composer__add"
-            data-tip={t("composer.addImages")}
-            aria-label={t("composer.addImages")}
-            disabled={!boardId}
-            onClick={() => void addImages()}
-          >
-            <ImagePlus size={17} />
-          </button>
+          <div className="cm-plugmenu" ref={menuRef}>
+            <button
+              ref={addBtnRef}
+              className="cm-composer__add"
+              data-tip={t("composer.addMenu")}
+              aria-label={t("composer.addMenu")}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              disabled={!boardId}
+              onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
+            >
+              <Plus size={18} />
+            </button>
+            {menuOpen && (
+              <div className="cm-menu" role="menu">
+                <button className="cm-menu__item" role="menuitem" onClick={pickUpload}>
+                  <ImagePlus size={16} />
+                  <span>{t("composer.uploadMedia")}</span>
+                </button>
+                <button
+                  className="cm-menu__item"
+                  role="menuitem"
+                  aria-expanded={showPlugins}
+                  onClick={togglePlugins}
+                >
+                  <Puzzle size={16} />
+                  <span>{t("composer.plugins")}</span>
+                  <ChevronRight size={14} className="cm-menu__chev" />
+                </button>
+                {showPlugins && (
+                  <div className="cm-menu__sub">
+                    <div className="cm-menu__subhead">{t("composer.pluginsEnabled")}</div>
+                    {plugins === null && !pluginsErr && (
+                      <div className="cm-menu__note">{t("composer.pluginsLoading")}</div>
+                    )}
+                    {pluginsErr && <div className="cm-menu__note">{t("composer.pluginsErr")}</div>}
+                    {plugins?.length === 0 && (
+                      <div className="cm-menu__note">{t("composer.pluginsNone")}</div>
+                    )}
+                    {plugins?.map((p) => (
+                      <button
+                        key={p.id}
+                        className="cm-menu__item cm-menu__item--plugin"
+                        role="menuitemradio"
+                        aria-checked={selectedPlugin?.id === p.id}
+                        title={p.id}
+                        onClick={() => pickPlugin(p)}
+                      >
+                        <Puzzle size={14} />
+                        <span className="cm-menu__pname">{p.name}</span>
+                        {selectedPlugin?.id === p.id && (
+                          <Check size={14} className="cm-menu__chk" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {selectedPlugin && (
+            <div className="cm-plugchip" title={selectedPlugin.id}>
+              <Puzzle size={12} />
+              <span>{selectedPlugin.name}</span>
+              <button
+                className="cm-plugchip__x"
+                aria-label={t("composer.pluginClear")}
+                onClick={() => setSelectedPlugin(null)}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
           <div className="cm-composer__barspacer" />
           {running ? (
             <button className="cm-send cm-send--stop" title={t("composer.stop")} onClick={stop}>
