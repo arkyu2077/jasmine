@@ -28,7 +28,7 @@ The local Codex you already pay for can edit images, edit video, and render moti
 
 Jasmine sets it loose on an **infinite canvas**. Open a folder and its images and clips spread across the board. Point at exactly what you mean, mark it up, say what you want — Codex generates, edits, and animates, and every result lands right beside its source. **You direct; Codex creates.**
 
-No new model, no API key, no per-image fee — Jasmine drives the Codex you already run (your ChatGPT subscription). It owns only what a chat window can't: a spatial canvas, the files that *are* your work, non-destructive lineage, and a way to point at exactly what you mean.
+No new model, no API key, no per-image fee — Jasmine drives the Codex you already run (your ChatGPT subscription). It owns only what a chat window can't: a spatial canvas, the files that *are* your work, originals that never get overwritten, and a way to point at exactly what you mean.
 
 ## Why Jasmine
 
@@ -92,7 +92,7 @@ If `codex` isn't installed yet, see the [Codex CLI docs](https://developers.open
 2. **Pan / zoom.** Two-finger scroll pans, ⌘/Ctrl + scroll zooms. Click to select, Shift-drag to marquee-select, drag to move; corner handles resize, the top handle rotates.
 3. **Mark a region** (optional). Press `R` (or pick the ▭ tool), drag a box on an image, and add a note. `V` returns to select. The mark is sent to Codex as an image overlay — so you point instead of describe.
 4. **Ask Codex.** With image(s) selected, type an instruction (or tap a preset like *Remove background*) and Send. Use the **"+"** menu to attach uploads or pick an enabled Codex plugin for the turn.
-5. **Results land to the right of the source.** Keep going — "warmer," "now change the background," "make it a 10-second clip." The session is continuous, non-destructive, and every output is a new file with visible lineage.
+5. **Results land to the right of the source.** Keep going — "warmer," "now change the background," "make it a 10-second clip." The session keeps going, your originals are never changed, and every result is a new file sitting next to the one it came from.
 
 ## Features
 
@@ -110,7 +110,7 @@ If `codex` isn't installed yet, see the [Codex CLI docs](https://developers.open
 
 Jasmine is **Tauri 2 (Rust) + React + PixiJS v8**. The web layer owns chrome; a GPU compositor owns the canvas. Images are fed to the canvas through a custom Jasmine image protocol with path-normalization and traversal guards; Rust handles decode / downscale / mipmaps off the main thread.
 
-Codex runs as a long-lived **`codex app-server`** sidecar (JSON-RPC 2.0 over stdio) — one process per board, so the session is genuinely stateful. Marked regions are flattened to an overlay image and sent alongside the clean image as file paths the agent reads itself. Image and video outputs are detected, minted as new content-addressed assets, and placed to the right of the source with lineage intact.
+Codex runs as a long-lived **`codex app-server`** sidecar (JSON-RPC 2.0 over stdio) — one process per board, so the session is genuinely stateful. Marked regions are flattened to an overlay image and sent alongside the clean image as file paths the agent reads itself. Image and video outputs are detected, saved as new files, and placed to the right of the source they were made from.
 
 ---
 
@@ -145,7 +145,7 @@ Release signing/notarization is optional and read from `.env` (macOS) — see [`
 
 ## Status
 
-**v0.0.1 — the first public release.** The full loop works end-to-end: open a folder → spread it on the canvas → point and mark → ask Codex → output lands with lineage → keep going. Published to [GitHub Releases](https://github.com/arkyu2077/jasmine/releases). This first build is **macOS** (Intel, and Apple Silicon via Rosetta 2); **native Apple Silicon and a Windows installer are coming next.**
+**v0.0.1 — the first public release.** The full loop works end-to-end: open a folder → spread it on the canvas → point and mark → ask Codex → the result lands next to the image it came from → keep going. Published to [GitHub Releases](https://github.com/arkyu2077/jasmine/releases). This first build is **macOS** (Intel, and Apple Silicon via Rosetta 2); **native Apple Silicon and a Windows installer are coming next.**
 
 ## Acknowledgments
 
@@ -169,13 +169,13 @@ Jasmine is an independent, unofficial tool. It drives the Codex CLI but is **not
 
 Jasmine 把它放上一块**无限画布**。打开一个文件夹，里面的图和片段在画布上铺开;你指着要改的地方、画个框、说一句 —— Codex 来生成、修改、做动效，每个结果都落在源图旁边。**你来指挥，Codex 来创作。**
 
-不换模型、不要 API key、不按张收费 —— Jasmine 驱动的是你已经在跑的 Codex（你的 ChatGPT 订阅）。它只负责聊天框给不了的:空间画布、**就是你作品本身**的文件、非破坏血缘，以及「指着说」。
+不换模型、不要 API key、不按张收费 —— Jasmine 驱动的是你已经在跑的 Codex（你的 ChatGPT 订阅）。它只负责聊天框给不了的:空间画布、**就是你作品本身**的文件、原图永不被改写、改了哪都看得到，以及「指着说」。
 
 ## 为什么用 Jasmine
 
 - **图与视频，同一块画布** —— 先生成、修图，再把它们做成片段和动效，全在一块板上。
 - **指，而不是描述** —— 圈出你要的像素（或拖到某一帧），Codex 看得到你到底指着什么。
-- **默认非破坏** —— 原图永不被改，每个版本都是上一版旁边的新文件，布局本身就是历史。
+- **原图永不被改** —— 每个版本都是上一版旁边的新文件;从哪改来的、改了几版，看位置就知道。
 - **用你已有的 Codex** —— 你的 ChatGPT 订阅，无需 API key，不额外花钱。
 - **本地、属于你** —— 一个 board 就是一个文件夹，任何工具都能打开。
 
@@ -231,7 +231,7 @@ codex --version    # 确认它在 PATH 上
 2. **平移 / 缩放。** 双指滚动平移，⌘/Ctrl + 滚动缩放。点击选中，Shift 拖拽框选，拖动移动；角点缩放，顶部把手旋转。
 3. **标记区域**（可选）。按 `R`（或选 ▭ 工具）在图上拖一个框、加备注。`V` 回到选择。标记会作为蒙层图发给 Codex——所以你是「指」，不是「描述」。
 4. **问 Codex。** 选中图后输入指令（或点「去背景」之类预设）发送。用 **「+」** 菜单可附加上传、或为这一轮挑一个已启用的 Codex 插件。
-5. **结果落在源图右侧。** 继续就好——「再暖一点」「换个背景」「做成 10 秒的片段」。会话连续、非破坏，每个产出都是带可见血缘的新文件。
+5. **结果落在源图右侧。** 继续就好——「再暖一点」「换个背景」「做成 10 秒的片段」。会话一直接着聊，原图永远不动，每个产出都是一个新文件，就放在它的来源旁边。
 
 ## 功能
 
@@ -249,7 +249,7 @@ codex --version    # 确认它在 PATH 上
 
 Jasmine = **Tauri 2（Rust）+ React + PixiJS v8**。Web 层管 chrome，GPU 合成器管画布。图片经自定义 Jasmine 图片协议喂给画布（路径规范化 + 防穿越），Rust 在主线程外负责解码 / 降采样 / mipmap。
 
-Codex 作为长驻 **`codex app-server`** sidecar 运行（JSON-RPC 2.0 over stdio）——每个 board 一个进程，所以会话是真正有状态的。圈选区域会拍平成一张蒙层图，连同干净原图一起以文件路径的形式发给 agent 自读。图像与视频产出会被检测、铸成内容寻址的新 asset、落在源图右侧并带上血缘。
+Codex 作为长驻 **`codex app-server`** sidecar 运行（JSON-RPC 2.0 over stdio）——每个 board 一个进程，所以会话是真正有状态的。圈选区域会拍平成一张蒙层图，连同干净原图一起以文件路径的形式发给 agent 自读。图像与视频产出会被检测、存成新文件、落在源图右侧，并标明它是从哪张改来的。
 
 ---
 
@@ -284,7 +284,7 @@ pnpm tauri dev        # 启动桌面 app，热重载
 
 ## 状态
 
-**v0.0.1 —— 首个公开版本。** 全链路跑通:开文件夹 → 铺到画布 → 指/标记 → 问 Codex → 产出带血缘落地 → 继续。已发布到 [GitHub Releases](https://github.com/arkyu2077/jasmine/releases)。首个构建为 **macOS**(Intel,Apple Silicon 走 Rosetta 2);**原生 Apple Silicon 与 Windows 安装器下一版补上。**
+**v0.0.1 —— 首个公开版本。** 全链路跑通:开文件夹 → 铺到画布 → 指/标记 → 问 Codex → 产出落在它的来源图旁边 → 继续。已发布到 [GitHub Releases](https://github.com/arkyu2077/jasmine/releases)。首个构建为 **macOS**(Intel,Apple Silicon 走 Rosetta 2);**原生 Apple Silicon 与 Windows 安装器下一版补上。**
 
 ## 致谢
 
