@@ -5,8 +5,8 @@
 <h1 align="center">Jasmine</h1>
 
 <p align="center">
-  <b>Make Codex your design brain.</b><br/>
-  An infinite canvas where you point, mark, and talk — and your local Codex generates, edits, and animates the design.
+  <b>Codex + an infinite canvas. Unleash your creativity.</b><br/>
+  Edit video, edit images, and more — your local Codex, set loose on a canvas without limits.
 </p>
 
 <p align="center">
@@ -22,13 +22,21 @@
 
 ## What is Jasmine?
 
-**Make Codex your design brain. Jasmine is the native desktop canvas it designs on — hands and eyes for your local Codex agent's image and video work.**
+**Codex, on an infinite canvas — your creativity, unleashed.**
 
-Chat is a terrible interface for images. You can't point at the corner of a photo and say "this part." You can't see three variations side by side. You can't keep the original next to the edit. Codex can already generate and edit images and render video — but a single scrolling chat column flattens all of that into a thread you lose track of.
+The local Codex you already pay for can edit images, edit video, and render motion graphics — but it's stuck in a chat box, and a scrolling column of text is a terrible place to do visual work. You can't point at the part you mean, see three takes side by side, or keep the original next to the edit.
 
-Jasmine puts that capability into a **spatial canvas** instead. You open a folder, its images and clips lay out on an infinite board, and you work the way you actually think: select one, draw a box on the part you mean, type an instruction, and the result lands **right next to the source** so the lineage is visible. The conversation stays continuous — "warmer," "now change the background," "do that to these three" — because there's one ongoing Codex session per board.
+Jasmine sets it loose on an **infinite canvas**. Open a folder and its images and clips spread across the board. Point at exactly what you mean, mark it up, say what you want — Codex generates, edits, and animates, and every result lands right beside its source. **You direct; Codex creates.**
 
-Jasmine is **the hands and eyes, not the brain.** It does not host a model, sell tokens, or orchestrate agents. All generation and understanding stay with Codex (using your existing ChatGPT subscription — no API key). Jasmine owns only what a chat UI structurally can't: spatial layout, file identity, non-destructive lineage, and "what you're pointing at."
+No new model, no API key, no per-image fee — Jasmine drives the Codex you already run (your ChatGPT subscription). It owns only what a chat window can't: a spatial canvas, the files that *are* your work, non-destructive lineage, and a way to point at exactly what you mean.
+
+## Why Jasmine
+
+- **One canvas for stills *and* motion** — generate and edit images, then turn them into clips and motion graphics, all on the same board.
+- **Point, don't describe** — circle the pixels (or scrub to the moment) you mean; Codex sees exactly what you're pointing at.
+- **Non-destructive by default** — originals never change; every version is a new file beside the last, so the layout *is* the history.
+- **The Codex you already have** — your ChatGPT subscription. No API key, no extra bill.
+- **Local and yours** — a board is just a folder of files any tool can open.
 
 ---
 
@@ -96,7 +104,7 @@ If `codex` isn't installed yet, see the [Codex CLI docs](https://developers.open
 - **Undo / redo**, **multiple sessions** per board with full timeline persistence, and a **workspaces** sidebar.
 - **Continuous Codex session** with streaming responses, plan/tool visibility, and clarifying-question support.
 - **Settings + network proxy**, unified logging, **i18n (English / 中文)**, and a system tray.
-- Cross-platform: **Windows, macOS (Apple Silicon + Intel)**.
+- Platforms: **macOS** today (Intel, and Apple Silicon via Rosetta 2). **Native Apple Silicon and Windows are coming next.**
 
 ## How it works
 
@@ -137,7 +145,7 @@ Release signing/notarization is optional and read from `.env` (macOS) — see [`
 
 ## Status
 
-**v1 shipped.** The full loop works end-to-end: open a folder → render on the canvas → mark a region → ask Codex → output lands with lineage → continue the conversation. Builds are published to [GitHub Releases](https://github.com/arkyu2077/jasmine/releases) for macOS (Apple Silicon + Intel) and Windows.
+**v0.0.1 — the first public release.** The full loop works end-to-end: open a folder → spread it on the canvas → point and mark → ask Codex → output lands with lineage → keep going. Published to [GitHub Releases](https://github.com/arkyu2077/jasmine/releases). This first build is **macOS** (Intel, and Apple Silicon via Rosetta 2); **native Apple Silicon and a Windows installer are coming next.**
 
 ## Acknowledgments
 
@@ -155,13 +163,21 @@ Jasmine is an independent, unofficial tool. It drives the Codex CLI but is **not
 
 ## Jasmine 是什么？
 
-**让 Codex 成为你的设计大脑。Jasmine 是它作画的原生桌面画布——给你本地的 Codex agent 装上做图、做视频用的「手」和「眼」。**
+**Codex,搬上无限画布 —— 让你的创意无限释放。**
 
-聊天框是处理图片最糟糕的界面。你没法指着照片的某个角说「就这块」；没法把三个变体并排着看；没法让原图和改后图挨在一起对照。Codex 本来就能生图、改图、渲视频——但一条不断下滚的聊天列把这一切压扁成了一根你很快就跟丢的线索。
+你已经在付费的本地 Codex，本来就能修图、剪视频、做动效——但它困在聊天框里，而一条不断下滚的文字流，是做视觉最糟糕的地方:你没法指着「就这块」，没法把三个方案并排着看，也没法让原图和改后图挨在一起。
 
-Jasmine 把这份能力搬进了**空间画布**。你打开一个文件夹，里面的图和片段在无限画布上铺开，然后用你真正思考的方式去工作：选中一张、在你想改的部位画个框、敲一句指令，结果就落在**源图右边**，血缘一目了然。对话是连续的——「再暖一点」「现在换个背景」「把这三张都这么处理」——因为每个 board 对应一条持续的 Codex 会话。
+Jasmine 把它放上一块**无限画布**。打开一个文件夹，里面的图和片段在画布上铺开;你指着要改的地方、画个框、说一句 —— Codex 来生成、修改、做动效，每个结果都落在源图旁边。**你来指挥，Codex 来创作。**
 
-Jasmine 是**手和眼，不是脑子**。它不托管模型、不卖 token、不在 agent 层做编排。所有生成与理解都交给 Codex（用你已有的 ChatGPT 订阅，无需 API key）。Jasmine 只负责聊天 UI 结构上做不到的事：空间布局、文件身份、非破坏血缘，以及「你正指着什么」。
+不换模型、不要 API key、不按张收费 —— Jasmine 驱动的是你已经在跑的 Codex（你的 ChatGPT 订阅）。它只负责聊天框给不了的:空间画布、**就是你作品本身**的文件、非破坏血缘，以及「指着说」。
+
+## 为什么用 Jasmine
+
+- **图与视频，同一块画布** —— 先生成、修图，再把它们做成片段和动效，全在一块板上。
+- **指，而不是描述** —— 圈出你要的像素（或拖到某一帧），Codex 看得到你到底指着什么。
+- **默认非破坏** —— 原图永不被改，每个版本都是上一版旁边的新文件，布局本身就是历史。
+- **用你已有的 Codex** —— 你的 ChatGPT 订阅，无需 API key，不额外花钱。
+- **本地、属于你** —— 一个 board 就是一个文件夹，任何工具都能打开。
 
 ---
 
@@ -227,7 +243,7 @@ codex --version    # 确认它在 PATH 上
 - **撤销 / 重做**，每个 board **多会话**且完整时间线持久化，**工作区**侧栏。
 - **连续 Codex 会话**：流式输出、plan/工具过程可见、支持澄清反问。
 - **设置 + 网络代理**、统一日志、**国际化（English / 中文）**、系统托盘。
-- 跨平台：**Windows、macOS（Apple Silicon + Intel）**。
+- 平台:**macOS** 已发(Intel,Apple Silicon 走 Rosetta 2)。**原生 Apple Silicon 和 Windows 下一版补上。**
 
 ## 工作原理
 
@@ -268,7 +284,7 @@ pnpm tauri dev        # 启动桌面 app，热重载
 
 ## 状态
 
-**v1 已发布。** 全链路跑通：开文件夹 → 渲染到画布 → 标记区域 → 问 Codex → 产出带血缘落地 → 续聊。构建已发布到 [GitHub Releases](https://github.com/arkyu2077/jasmine/releases)，覆盖 macOS（Apple Silicon + Intel）与 Windows。
+**v0.0.1 —— 首个公开版本。** 全链路跑通:开文件夹 → 铺到画布 → 指/标记 → 问 Codex → 产出带血缘落地 → 继续。已发布到 [GitHub Releases](https://github.com/arkyu2077/jasmine/releases)。首个构建为 **macOS**(Intel,Apple Silicon 走 Rosetta 2);**原生 Apple Silicon 与 Windows 安装器下一版补上。**
 
 ## 致谢
 
