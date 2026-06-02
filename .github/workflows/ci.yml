@@ -48,4 +48,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      - name: Stage ffmpeg sidecars + notice for the build script
+        # externalBin (ffmpeg/ffprobe) + the THIRD_PARTY_NOTICES resource are
+        # gitignored and fetched per release platform. `cargo test --lib` never runs
+        # them, but tauri-build checks they exist for the build target — so stage
+        # empty stubs (and the real, committed notice) to satisfy that check.
+        run: |
+          T=$(rustc -vV | sed -n 's/^host: //p')
+          mkdir -p src-tauri/binaries
+          for b in ffmpeg ffprobe; do
+            printf '#!/bin/sh\n' > "src-tauri/binaries/$b-$T"
+            chmod +x "src-tauri/binaries/$b-$T"
+          done
+          cp scripts/THIRD_PARTY_NOTICES.ffmpeg.txt src-tauri/binaries/THIRD_PARTY_NOTICES
       - run: cargo test --lib --manifest-path src-tauri/Cargo.toml
