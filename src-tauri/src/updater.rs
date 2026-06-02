@@ -509,3 +509,16 @@ pub async fn install_pending_update(
     codex.kill_all_sync();
     app.restart();
 }
+
+/// Other targets (e.g. the Linux CI runner): the auto-updater ships only on
+/// macOS + Windows, but `generate_handler!` in lib.rs lists this command, so it
+/// must exist for every build target. Stub it — Jasmine isn't distributed on
+/// Linux, so this is never invoked on a real build.
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[tauri::command]
+pub async fn install_pending_update(
+    _app: AppHandle,
+    _codex: State<'_, Arc<CodexRegistry>>,
+) -> Result<(), String> {
+    Err("auto-update is not supported on this platform".into())
+}
