@@ -48,11 +48,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - name: Stage ffmpeg sidecars + notice for the build script
-        # externalBin (ffmpeg/ffprobe) + the THIRD_PARTY_NOTICES resource are
-        # gitignored and fetched per release platform. `cargo test --lib` never runs
-        # them, but tauri-build checks they exist for the build target — so stage
-        # empty stubs (and the real, committed notice) to satisfy that check.
+      - name: Stage build-script placeholders (sidecars, notice, frontend dist)
+        # `cargo test --lib` compiles the crate, which runs tauri-build +
+        # generate_context!. Those check that paths from tauri.conf.json exist:
+        #   - externalBin ffmpeg/ffprobe + the THIRD_PARTY_NOTICES resource
+        #     (gitignored, fetched per release platform), and
+        #   - frontendDist (../dist, normally produced by `pnpm build`).
+        # The unit tests don't use any of these, so stage minimal placeholders to
+        # satisfy the build script without building the real frontend or ffmpeg.
         run: |
           T=$(rustc -vV | sed -n 's/^host: //p')
           mkdir -p src-tauri/binaries
@@ -61,4 +64,5 @@ jobs:
             chmod +x "src-tauri/binaries/$b-$T"
           done
           cp scripts/THIRD_PARTY_NOTICES.ffmpeg.txt src-tauri/binaries/THIRD_PARTY_NOTICES
+          mkdir -p dist && printf '<!doctype html><title>jasmine ci</title>' > dist/index.html
       - run: cargo test --lib --manifest-path src-tauri/Cargo.toml
