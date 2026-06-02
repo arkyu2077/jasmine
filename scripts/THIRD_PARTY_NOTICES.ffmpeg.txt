@@ -9,8 +9,12 @@ not combined into a single work, so each keeps its own license).
 
   FFmpeg project:  https://ffmpeg.org/
   License:         GNU GPL v2 or later — https://www.gnu.org/licenses/gpl-2.0.html
-  Bundled build:   FFmpeg 8.1.1, static macOS build from evermeet.cx
-                   https://evermeet.cx/ffmpeg/
+  Bundled builds:  x86_64 — FFmpeg 8.1.1 static macOS build from evermeet.cx
+                            https://evermeet.cx/ffmpeg/
+                   arm64  — FFmpeg 8.1 static macOS build from osxexperts.net
+                            https://www.osxexperts.net/
+                            (ffmpeg sha256 9a08d61f…287028,
+                             ffprobe sha256 aab17ac7…8844e6)
   Corresponding source:
                    FFmpeg sources — https://ffmpeg.org/download.html
                    (the exact version above; also obtainable from the FFmpeg git

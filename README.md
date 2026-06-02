@@ -59,8 +59,9 @@ If `codex` isn't installed yet, see the [Codex CLI docs](https://developers.open
 
 ### macOS
 
-1. On the [releases page](https://github.com/arkyu2077/jasmine/releases/latest), download **`Jasmine_<version>_x64.dmg`**.
-   > **v0.0.1 ships a single Intel build that runs on every Mac** — on Apple Silicon (M-series) it runs through Rosetta 2 (you may be prompted to install it on first launch). A native Apple-Silicon build is coming in the next release.
+1. On the [releases page](https://github.com/arkyu2077/jasmine/releases/latest), download the `.dmg` for your chip:
+   - **Apple Silicon** (M-series): `Jasmine_<version>_aarch64.dmg`
+   - **Intel**: `Jasmine_<version>_x64.dmg`
 2. Open the `.dmg` and drag **Jasmine** into **Applications**.
 3. **First launch** — the build is not yet Apple-notarized, so macOS Gatekeeper will warn "Jasmine can't be opened because Apple cannot check it for malicious software." This is expected. To open it:
    - **Right-click** (or Control-click) **Jasmine.app → Open → Open**, *or*
@@ -104,7 +105,7 @@ If `codex` isn't installed yet, see the [Codex CLI docs](https://developers.open
 - **Undo / redo**, **multiple chats** per folder (each saved with its full history), and a **workspaces** sidebar.
 - **One continuous Codex chat** — replies stream in, you can watch its steps, and it can ask clarifying questions.
 - **Settings + network proxy**, unified logging, **English / 中文 interface**, and a system tray.
-- Platforms: **macOS** today (Intel, and Apple Silicon via Rosetta 2). **Native Apple Silicon and Windows are coming next.**
+- Platforms: **macOS** — native Apple Silicon and Intel. **Windows is coming next.**
 
 ## How it works
 
@@ -145,7 +146,7 @@ Release signing/notarization is optional and read from `.env` (macOS) — see [`
 
 ## Status
 
-**v0.0.1 — the first public release.** The full loop works end-to-end: open a folder → spread it on the canvas → point and mark → ask Codex → the result lands next to the image it came from → keep going. Published to [GitHub Releases](https://github.com/arkyu2077/jasmine/releases). This first build is **macOS** (Intel, and Apple Silicon via Rosetta 2); **native Apple Silicon and a Windows installer are coming next.**
+**v0.0.1 — the first public release.** The full loop works end-to-end: open a folder → spread it on the canvas → point and mark → ask Codex → the result lands next to the image it came from → keep going. Published to [GitHub Releases](https://github.com/arkyu2077/jasmine/releases). This first build is **macOS** — native Apple Silicon and Intel. **A Windows installer is coming next.**
 
 ## Acknowledgments
 
@@ -200,8 +201,9 @@ codex --version    # 确认它在 PATH 上
 
 ### macOS
 
-1. 在[发布页](https://github.com/arkyu2077/jasmine/releases/latest)下载 **`Jasmine_<版本>_x64.dmg`**。
-   > **v0.0.1 只发一个 Intel 构建,但它能在所有 Mac 上跑** —— Apple Silicon(M 系列)通过 Rosetta 2 运行(首次启动可能提示安装)。原生 Apple Silicon 版本下一版补上。
+1. 在[发布页](https://github.com/arkyu2077/jasmine/releases/latest)下载对应芯片的 `.dmg`：
+   - **Apple Silicon**（M 系列）：`Jasmine_<版本>_aarch64.dmg`
+   - **Intel**：`Jasmine_<版本>_x64.dmg`
 2. 打开 `.dmg`，把 **Jasmine** 拖进 **Applications**。
 3. **首次打开**——目前还没做 Apple 公证，macOS Gatekeeper 会提示「无法打开，因为 Apple 无法检查其是否包含恶意软件」。这是正常的，按以下任一方式打开：
    - **右键**（或 Control 点击）**Jasmine.app → 打开 → 打开**，或
@@ -243,7 +245,7 @@ codex --version    # 确认它在 PATH 上
 - **撤销 / 重做**，每个文件夹可开**多条对话**（完整历史都保存），**工作区**侧栏。
 - **一条连续的 Codex 对话**：回复实时流出、能看到它的操作步骤、需要时会反问你。
 - **设置 + 网络代理**、统一日志、**中英文界面（English / 中文）**、系统托盘。
-- 平台:**macOS** 已发(Intel,Apple Silicon 走 Rosetta 2)。**原生 Apple Silicon 和 Windows 下一版补上。**
+- 平台:**macOS** —— 原生 Apple Silicon + Intel。**Windows 下一版补上。**
 
 ## 工作原理
 
@@ -284,7 +286,7 @@ pnpm tauri dev        # 启动桌面 app，热重载
 
 ## 状态
 
-**v0.0.1 —— 首个公开版本。** 全链路跑通:开文件夹 → 铺到画布 → 指/标记 → 问 Codex → 产出落在它的来源图旁边 → 继续。已发布到 [GitHub Releases](https://github.com/arkyu2077/jasmine/releases)。首个构建为 **macOS**(Intel,Apple Silicon 走 Rosetta 2);**原生 Apple Silicon 与 Windows 安装器下一版补上。**
+**v0.0.1 —— 首个公开版本。** 全链路跑通:开文件夹 → 铺到画布 → 指/标记 → 问 Codex → 产出落在它的来源图旁边 → 继续。已发布到 [GitHub Releases](https://github.com/arkyu2077/jasmine/releases)。首个构建为 **macOS** —— 原生 Apple Silicon + Intel;**Windows 安装器下一版补上。**
 
 ## 致谢
 

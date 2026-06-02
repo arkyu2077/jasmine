@@ -35,11 +35,20 @@ echo "Rust build target: $TRIPLE"
 case "$os" in
   Darwin)
     EXE=""
-    # evermeet.cx publishes notarized static ffmpeg/ffprobe for macOS. NOTE: these
-    # are x86_64 builds (run via Rosetta on arm64). For an arm64-NATIVE bundle,
-    # point FFMPEG_URL/FFPROBE_URL at an arm64 source (e.g. osxexperts.net).
-    FFMPEG_ZIP="${FFMPEG_URL:-https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip}"
-    FFPROBE_ZIP="${FFPROBE_URL:-https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip}"
+    # Pick a source that matches the build target's arch:
+    #  - arm64  → osxexperts.net (arm64-native static FFmpeg 8.1)
+    #  - x86_64 → evermeet.cx (notarized x86_64 static ffmpeg/ffprobe)
+    # Override either with FFMPEG_URL / FFPROBE_URL if you self-host.
+    case "$TRIPLE" in
+      aarch64-apple-darwin)
+        FFMPEG_ZIP="${FFMPEG_URL:-https://www.osxexperts.net/ffmpeg81arm.zip}"
+        FFPROBE_ZIP="${FFPROBE_URL:-https://www.osxexperts.net/ffprobe81arm.zip}"
+        ;;
+      *)
+        FFMPEG_ZIP="${FFMPEG_URL:-https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip}"
+        FFPROBE_ZIP="${FFPROBE_URL:-https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip}"
+        ;;
+    esac
     ;;
   MINGW*|MSYS*|CYGWIN*)
     TRIPLE="x86_64-pc-windows-msvc"
