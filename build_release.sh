@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# build_release.sh — production macOS build: signed, notarized .dmg(s) + auto-update payloads.
+# build_release.sh — production macOS build: macOS .dmg installer(s).
 #
 # Default = BOTH arches (Apple Silicon + Intel) as separate per-arch .dmgs, each
-# with its .app.tar.gz + .sig auto-update payload. Updater artifacts are enabled
-# by bundle.createUpdaterArtifacts in tauri.conf.json. This is the everyday
-# release path that feeds publish_release.sh — running the script with no flags is
-# the correct daily build. Jasmine bundles no per-arch binaries (it drives the user's
-# own `codex` CLI), so a single **universal** .dmg is also available via
-# --universal for manual one-link distribution (universal carries NO updater payload).
+# suitable for upload by publish_release.sh. Jasmine currently has no updater
+# server/CDN, so tauri.conf.json keeps bundle.createUpdaterArtifacts=false and
+# this script does not require .app.tar.gz/.sig files. Jasmine bundles no
+# per-arch Codex runtime (it drives the user's own `codex` CLI), so a single
+# **universal** .dmg is also available via --universal for manual one-link
+# distribution.
 #
 # Usage:
 #   ./build_release.sh                 # arm64 + Intel, per-arch, WITH updater  [default]
@@ -70,6 +70,13 @@ for arg in "$@"; do
 done
 
 command -v pnpm  >/dev/null || die "pnpm not on PATH (run ./setup.sh)"
+
+# Prefer the rustup toolchain when available. Homebrew rustc/cargo can shadow
+# rustup on PATH and then fail cross-target builds with "can't find crate std"
+# even when rustup has the requested macOS targets installed.
+if [[ -x "$HOME/.cargo/bin/cargo" ]]; then
+  export PATH="$HOME/.cargo/bin:$PATH"
+fi
 command -v cargo >/dev/null || die "cargo not on PATH (run ./setup.sh)"
 
 # ── signing env (optional) ────────────────────────────────────────────────────
@@ -101,13 +108,13 @@ else
   warn "no APPLE_SIGNING_IDENTITY — building AD-HOC signed (won't pass Gatekeeper on other Macs)"
 fi
 
-# Tauri updater needs the signing private key in env to produce signed .sig
-# files alongside the .app.tar.gz. Without it the build skips the .sig and
-# publish_release.sh refuses to ship.
-if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+updater_artifacts=$(node -p "require('./src-tauri/tauri.conf.json').bundle.createUpdaterArtifacts ? 'true' : 'false'")
+if [[ "$updater_artifacts" == "true" && -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
   ok "tauri update signing key present — updater artifacts (.app.tar.gz + .sig) will be generated"
+elif [[ "$updater_artifacts" == "true" ]]; then
+  warn "createUpdaterArtifacts=true but no TAURI_SIGNING_PRIVATE_KEY — updater .sig files may be missing"
 else
-  warn "no TAURI_SIGNING_PRIVATE_KEY — updater artifacts will NOT be signed. Auto-update payloads can't be published."
+  ok "updater artifacts disabled — building .dmg installers only"
 fi
 
 # ── version sanity (package.json ↔ Cargo.toml ↔ tauri.conf.json) ─────────────
@@ -171,8 +178,8 @@ for target in "${TARGETS[@]}"; do
   fi
   [[ -n "$dmg" ]] || die "no .dmg produced for $target"
   dmgs+=("$dmg")
-  # Capture the updater tarball if Tauri produced one.
-  if [[ "$target" != "universal-apple-darwin" ]]; then
+  # Capture the updater tarball only when Tauri is configured to produce one.
+  if [[ "$updater_artifacts" == "true" && "$target" != "universal-apple-darwin" ]]; then
     tarball=$(ls -t "src-tauri/target/$target/release/bundle/macos/"*.app.tar.gz 2>/dev/null | head -1 || true)
     [[ -n "$tarball" ]] || die "no .app.tar.gz produced for $target (set TAURI_SIGNING_PRIVATE_KEY and keep bundle.createUpdaterArtifacts=true)"
     tarball_ver=$(tarball_short_version "$tarball")
@@ -189,14 +196,16 @@ echo "  ┌─ release artifact(s) ───────────────
 for d in "${dmgs[@]}"; do
   printf '     dmg     : %s (%s)\n' "$ROOT/$d" "$(size_of "$d")"
 done
-for t in "${tarballs[@]}"; do
-  printf '     update  : %s (%s)\n' "$ROOT/$t" "$(size_of "$t")"
-  if [[ -f "$t.sig" ]]; then
-    printf '             : %s (%s)\n' "$ROOT/$t.sig" "$(size_of "$t.sig")"
-  else
-    printf '             : %s\n' "$ROOT/$t.sig"
-  fi
-done
+if [[ ${#tarballs[@]} -gt 0 ]]; then
+  for t in "${tarballs[@]}"; do
+    printf '     update  : %s (%s)\n' "$ROOT/$t" "$(size_of "$t")"
+    if [[ -f "$t.sig" ]]; then
+      printf '             : %s (%s)\n' "$ROOT/$t.sig" "$(size_of "$t.sig")"
+    else
+      printf '             : %s\n' "$ROOT/$t.sig"
+    fi
+  done
+fi
 echo "  └───────────────────────────────────────────────────────────"
 echo ""
 

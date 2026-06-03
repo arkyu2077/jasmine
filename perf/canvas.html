@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jasmine Canvas Perf</title>
+    <style>
+      html,
+      body,
+      #root {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: var(--cm-canvas);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+      }
+      #perf-host {
+        position: fixed;
+        inset: 0;
+      }
+      #perf-panel {
+        position: fixed;
+        left: 12px;
+        top: 12px;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border: var(--cm-line);
+        border-radius: var(--cm-radius-md);
+        background: var(--cm-glass);
+        box-shadow: var(--cm-shadow-2);
+        color: var(--cm-fg);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        backdrop-filter: blur(8px);
+      }
+      #perf-run {
+        border: 0;
+        border-radius: 6px;
+        background: var(--cm-accent);
+        color: var(--cm-on-accent);
+        font: inherit;
+        font-weight: 600;
+        padding: 5px 9px;
+        cursor: pointer;
+      }
+      #perf-status {
+        color: var(--cm-fg-secondary);
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="perf-host"></div>
+      <div id="perf-panel">
+        <button id="perf-run" type="button">Run</button>
+        <span id="perf-status">initializing</span>
+      </div>
+      <script id="perf-result" type="application/json"></script>
+    </div>
+    <script type="module" src="/src/canvas/perfHarness.ts"></script>
+  </body>
+</html>

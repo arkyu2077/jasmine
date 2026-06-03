@@ -446,6 +446,11 @@ body,
   opacity: 0.35;
   cursor: default;
 }
+.cm-hud__dev {
+  color: var(--cm-fg-secondary);
+  padding-left: 2px;
+  white-space: nowrap;
+}
 
 /* ── Chat panel ─────────────────────────────────────────────────────────── */
 /* Floating frosted-glass AI panel (inset card over the full-screen canvas).

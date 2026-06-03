@@ -14,6 +14,13 @@ import type { Asset, Placement, PlacementUpdate, Shape, ShapeKind } from "../typ
 import { isVideoAsset } from "../types";
 import { jasmineUrl, ipc } from "../lib/ipc";
 import { loadAssetObjectUrl } from "../lib/asset-url";
+import { RafInputScheduler } from "./inputScheduler";
+import {
+  SpatialIndex,
+  boundsFromEdges as spatialBoundsFromEdges,
+  expandBounds,
+  type SpatialBounds,
+} from "./spatialIndex";
 
 export type Tool = "select" | "point" | "rect" | "ellipse" | "brush";
 
@@ -21,6 +28,17 @@ export interface SceneStats {
   fps: number;
   zoom: number;
   renderer: string;
+  placements: number;
+  activePlacements: number;
+  visiblePlacements: number;
+  culledPlacements: number;
+  indexCells: number;
+  frameMs: number;
+  inputCoalesced: number;
+  inputMaxDelayMs: number;
+  snapCandidates: number;
+  marqueeCandidates: number;
+  hitCandidates: number;
 }
 
 /** Right-click target reported to React: an image (with viewport x/y for the
@@ -103,14 +121,7 @@ interface Node {
   pumpRaf: number;
 }
 
-interface WorldBounds {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-  centerX: number;
-  centerY: number;
-}
+type WorldBounds = SpatialBounds;
 
 interface SnapGuide {
   axis: "x" | "y";
@@ -128,9 +139,28 @@ interface SnapMatch {
   sourceIndex: number;
 }
 
+interface PointerMoveFrame {
+  x: number;
+  y: number;
+}
+
+type WheelInput =
+  | { kind: "pan"; dx: number; dy: number }
+  | { kind: "zoom"; sx: number; sy: number; factor: number };
+
+function mergeWheelInput(prev: WheelInput, next: WheelInput): WheelInput {
+  if (prev.kind === "pan" && next.kind === "pan") return { kind: "pan", dx: prev.dx + next.dx, dy: prev.dy + next.dy };
+  if (prev.kind === "zoom" && next.kind === "zoom") {
+    return { kind: "zoom", sx: next.sx, sy: next.sy, factor: prev.factor * next.factor };
+  }
+  return next;
+}
+
 const MIN_SCALE = 0.02;
 const MAX_SCALE = 12;
 const ZOOM_STEP = 1.2;
+const CULL_OVERSCAN_PX = 900;
+const SNAP_TARGET_PAD_PX = 420;
 const SNAP_THRESHOLD_PX = 8;
 const SNAP_GUIDE_PAD = 28;
 const DRAG_START_THRESHOLD_PX = 5;
@@ -297,6 +327,12 @@ export class CanvasScene {
   private assets = new Map<string, Asset>();
   private annotations = new Map<string, Shape[]>();
   private nodes = new Map<string, Node>();
+  private readonly spatialIndex = new SpatialIndex();
+  private activePlacementIds = new Set<string>();
+  private visiblePlacementIds = new Set<string>();
+  private lastSnapCandidates = 0;
+  private lastMarqueeCandidates = 0;
+  private lastHitCandidates = 0;
   private selected = new Set<string>();
   private tool: Tool = "select";
 
@@ -363,6 +399,7 @@ export class CanvasScene {
   } | null = null;
 
   private statAccum = 0;
+  private avgFrameMs = 16.7;
   private minimapAccum = 0;
   private minimapVisible = false;
   private destroyed = false;
@@ -379,6 +416,13 @@ export class CanvasScene {
   private commentAnchor = { x: 0, y: 0 };
   // Localized strings for the imperative DOM overlays (set from React via i18n).
   private strings = { markComment: "What should change here…", renameHint: "Double-click to rename" };
+  private readonly pointerMoveScheduler = new RafInputScheduler<PointerMoveFrame>((frame) =>
+    this.handlePointerMove(frame)
+  );
+  private readonly wheelScheduler = new RafInputScheduler<WheelInput>(
+    (input) => this.applyWheelInput(input),
+    mergeWheelInput
+  );
 
   /** Update the canvas DOM-overlay strings when the UI language changes. */
   setStrings(s: { markComment: string; renameHint: string }): void {
@@ -442,9 +486,11 @@ export class CanvasScene {
     this.cam = { x: host.clientWidth / 2, y: host.clientHeight / 2, scale: 1 };
     this.applyCamera();
     this.bindInput();
+    this.syncActiveNodes(true);
 
     this.app.ticker.add((ticker) => {
       this.clock += ticker.deltaMS;
+      this.avgFrameMs = this.avgFrameMs * 0.88 + ticker.deltaMS * 0.12;
       if (this.placeholderNodes.size > 0) this.animatePlaceholders();
       this.updateTitle();
       this.updateComment();
@@ -457,11 +503,7 @@ export class CanvasScene {
       this.statAccum += ticker.deltaMS;
       if (this.statAccum >= 400) {
         this.statAccum = 0;
-        this.cb.onStats?.({
-          fps: Math.round(this.app.ticker.FPS),
-          zoom: this.cam.scale,
-          renderer: this.rendererLabel(),
-        });
+        this.cb.onStats?.(this.collectStats());
       }
     });
   }
@@ -479,6 +521,7 @@ export class CanvasScene {
     this.placements = placements;
     this.assets = assets;
     this.annotations = annotations;
+    this.rebuildSpatialIndex();
 
     // Remove nodes whose placement is gone.
     for (const [id, node] of this.nodes) {
@@ -488,26 +531,7 @@ export class CanvasScene {
         this.selected.delete(id);
       }
     }
-    // Create / update.
-    for (const p of placements.values()) {
-      const existing = this.nodes.get(p.id);
-      if (existing) {
-        if (existing.assetId !== p.assetId) {
-          // Asset swapped (e.g. crop bake / undo) — rebuild to load the new texture.
-          this.destroyNode(existing);
-          this.nodes.delete(p.id);
-          this.createNode(p);
-        } else {
-          this.applyTransform(existing, p);
-        }
-      } else {
-        this.createNode(p);
-      }
-    }
-    // Render persisted annotation marks.
-    for (const [id, node] of this.nodes) {
-      this.drawAnnotation(id, node, annotations.get(id) ?? []);
-    }
+    this.syncActiveNodes(true);
 
     // Sync loading placeholders.
     for (const [id, ph] of this.placeholderNodes) {
@@ -524,6 +548,7 @@ export class CanvasScene {
 
   setSelection(ids: string[]): void {
     this.selected = new Set(ids);
+    this.syncActiveNodes();
     this.refreshOutlines();
     this.syncVideoPlayback();
   }
@@ -536,6 +561,7 @@ export class CanvasScene {
   /** Enter/leave crop mode for a placement (driven by ui.cropping). */
   enterCrop(id: string): void {
     this.cropId = id;
+    this.syncActiveNodes();
     this.refreshCursor();
   }
   exitCrop(): void {
@@ -545,6 +571,7 @@ export class CanvasScene {
       this.annoTemp = null;
     }
     if (this.mode === "crop") this.mode = "idle";
+    this.syncActiveNodes();
     this.refreshCursor();
   }
 
@@ -563,51 +590,26 @@ export class CanvasScene {
     return { cx: this.safeInset.left + w / 2, cy: this.safeInset.top + h / 2, w, h };
   }
 
-  /** Center the viewport on a placement (fit to a comfortable size). */
-  focusPlacement(id: string): void {
-    const p = this.placements.get(id);
-    const node = this.nodes.get(id);
-    if (!p || !node) return;
-    const s = this.safeRect();
-    // Fit the image to ~55% of the smaller visible dimension.
-    const imgW = node.w * p.scale;
-    const imgH = node.h * p.scale;
-    const fit = (Math.min(s.w, s.h) * 0.55) / Math.max(imgW, imgH, 1);
-    this.cam.scale = clamp(fit, MIN_SCALE, MAX_SCALE);
-    this.cam.x = s.cx - p.x * this.cam.scale;
-    this.cam.y = s.cy - p.y * this.cam.scale;
-    this.applyCamera();
+  private visibleWorldBounds(overscanPx = 0): WorldBounds {
+    const vw = this.hostEl?.clientWidth || this.app.screen.width || 1;
+    const vh = this.hostEl?.clientHeight || this.app.screen.height || 1;
+    const a = this.screenToWorld(-overscanPx, -overscanPx);
+    const b = this.screenToWorld(vw + overscanPx, vh + overscanPx);
+    return this.boundsFromEdges(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y));
   }
 
-  /** Axis-aligned world bounds of the given placements (rotated corners). */
-  private boundsOf(ids: string[]): { minX: number; minY: number; maxX: number; maxY: number } | null {
-    const b = this.unionBounds(
-      ids
-        .map((id) => this.currentPlacementBounds(id))
-        .filter((bounds): bounds is WorldBounds => !!bounds)
-    );
-    return b ? { minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY } : null;
+  private placementSize(p: Placement): { w: number; h: number } {
+    const asset = this.assets.get(p.assetId);
+    return { w: asset?.width || 480, h: asset?.height || 480 };
   }
 
-  private boundsFromEdges(minX: number, minY: number, maxX: number, maxY: number): WorldBounds {
-    return {
-      minX,
-      minY,
-      maxX,
-      maxY,
-      centerX: (minX + maxX) / 2,
-      centerY: (minY + maxY) / 2,
-    };
-  }
-
-  /** Axis-aligned world bounds for a placement transform, including rotation. */
-  private boundsForTransform(node: Node, x: number, y: number, scale: number, rotation: number): WorldBounds {
+  private boundsForSizeTransform(w: number, h: number, x: number, y: number, scale: number, rotation: number): WorldBounds {
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
-    const hw = (node.w * scale) / 2;
-    const hh = (node.h * scale) / 2;
+    const hw = (w * scale) / 2;
+    const hh = (h * scale) / 2;
     const cos = Math.cos(rotation);
     const sin = Math.sin(rotation);
     for (const [lx, ly] of [
@@ -626,11 +628,148 @@ export class CanvasScene {
     return this.boundsFromEdges(minX, minY, maxX, maxY);
   }
 
-  private currentPlacementBounds(id: string): WorldBounds | null {
-    const node = this.nodes.get(id);
+  private boundsForPlacement(p: Placement): WorldBounds {
+    const { w, h } = this.placementSize(p);
+    return this.boundsForSizeTransform(w, h, p.x, p.y, p.scale, p.rotation);
+  }
+
+  private rebuildSpatialIndex(): void {
+    this.spatialIndex.clear();
+    for (const p of this.placements.values()) this.spatialIndex.set(p.id, this.boundsForPlacement(p));
+  }
+
+  private editingPlacementIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const id of this.dragOrigin.keys()) ids.add(id);
+    if (this.xform.id && (this.mode === "resize" || this.mode === "rotate")) ids.add(this.xform.id);
+    if (this.cropId) ids.add(this.cropId);
+    if (this.annoNodeId) ids.add(this.annoNodeId);
+    if (this.markDrag) ids.add(this.markDrag.pid);
+    return ids;
+  }
+
+  private sameIdSet(a: Set<string>, b: Set<string>): boolean {
+    if (a.size !== b.size) return false;
+    for (const id of a) if (!b.has(id)) return false;
+    return true;
+  }
+
+  private syncActiveNodes(force = false): void {
+    if (!this.inited) return;
+    const visible = new Set(this.spatialIndex.queryRect(this.visibleWorldBounds(CULL_OVERSCAN_PX)));
+    const nextActive = new Set(visible);
+    for (const id of this.selected) if (this.placements.has(id)) nextActive.add(id);
+    for (const id of this.editingPlacementIds()) if (this.placements.has(id)) nextActive.add(id);
+
+    const activeChanged = !this.sameIdSet(this.activePlacementIds, nextActive);
+    this.visiblePlacementIds = visible;
+    if (!force && !activeChanged) return;
+
+    let nodesChanged = false;
+    for (const [id, node] of this.nodes) {
+      if (!nextActive.has(id)) {
+        this.destroyNode(node);
+        this.nodes.delete(id);
+        nodesChanged = true;
+      }
+    }
+
+    for (const id of nextActive) {
+      const p = this.placements.get(id);
+      if (!p) continue;
+      const existing = this.nodes.get(id);
+      if (existing) {
+        if (existing.assetId !== p.assetId) {
+          this.destroyNode(existing);
+          this.nodes.delete(id);
+          this.createNode(p);
+          nodesChanged = true;
+        } else if (force) {
+          this.applyTransform(existing, p);
+          this.drawOutline(existing, !this.cropActive && this.selected.has(id));
+          this.drawAnnotation(id, existing, this.annotations.get(id) ?? []);
+        }
+      } else {
+        this.createNode(p);
+        const created = this.nodes.get(id);
+        if (created) {
+          this.drawOutline(created, !this.cropActive && this.selected.has(id));
+          this.drawAnnotation(id, created, this.annotations.get(id) ?? []);
+        }
+        nodesChanged = true;
+      }
+    }
+
+    this.activePlacementIds = nextActive;
+    if (nodesChanged) {
+      this.refreshCursor();
+      this.syncVideoPlayback();
+    }
+  }
+
+  private collectStats(): SceneStats {
+    const pointerStats = this.pointerMoveScheduler.sampleStats();
+    const wheelStats = this.wheelScheduler.sampleStats();
+    const indexStats = this.spatialIndex.stats();
+    const inputCoalesced = pointerStats.coalesced + wheelStats.coalesced;
+    return {
+      fps: Math.round(this.app.ticker.FPS),
+      zoom: this.cam.scale,
+      renderer: this.rendererLabel(),
+      placements: this.placements.size,
+      activePlacements: this.activePlacementIds.size,
+      visiblePlacements: this.visiblePlacementIds.size,
+      culledPlacements: Math.max(0, this.placements.size - this.activePlacementIds.size),
+      indexCells: indexStats.cells,
+      frameMs: Math.round(this.avgFrameMs * 10) / 10,
+      inputCoalesced,
+      inputMaxDelayMs: Math.round(Math.max(pointerStats.maxDelayMs, wheelStats.maxDelayMs) * 10) / 10,
+      snapCandidates: this.lastSnapCandidates,
+      marqueeCandidates: this.lastMarqueeCandidates,
+      hitCandidates: this.lastHitCandidates,
+    };
+  }
+
+  /** Center the viewport on a placement (fit to a comfortable size). */
+  focusPlacement(id: string): void {
     const p = this.placements.get(id);
-    if (!node || !p) return null;
-    return this.boundsForTransform(node, p.x, p.y, p.scale, p.rotation);
+    if (!p) return;
+    this.syncActiveNodes();
+    const s = this.safeRect();
+    // Fit the image to ~55% of the smaller visible dimension.
+    const { w, h } = this.placementSize(p);
+    const imgW = w * p.scale;
+    const imgH = h * p.scale;
+    const fit = (Math.min(s.w, s.h) * 0.55) / Math.max(imgW, imgH, 1);
+    this.cam.scale = clamp(fit, MIN_SCALE, MAX_SCALE);
+    this.cam.x = s.cx - p.x * this.cam.scale;
+    this.cam.y = s.cy - p.y * this.cam.scale;
+    this.applyCamera();
+  }
+
+  /** Axis-aligned world bounds of the given placements (rotated corners). */
+  private boundsOf(ids: string[]): { minX: number; minY: number; maxX: number; maxY: number } | null {
+    const b = this.unionBounds(
+      ids
+        .map((id) => this.currentPlacementBounds(id))
+        .filter((bounds): bounds is WorldBounds => !!bounds)
+    );
+    return b ? { minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY } : null;
+  }
+
+  private boundsFromEdges(minX: number, minY: number, maxX: number, maxY: number): WorldBounds {
+    return spatialBoundsFromEdges(minX, minY, maxX, maxY);
+  }
+
+  /** Axis-aligned world bounds for a placement transform, including rotation. */
+  private boundsForTransform(node: Node, x: number, y: number, scale: number, rotation: number): WorldBounds {
+    return this.boundsForSizeTransform(node.w, node.h, x, y, scale, rotation);
+  }
+
+  private currentPlacementBounds(id: string): WorldBounds | null {
+    const p = this.placements.get(id);
+    if (!p) return null;
+    return this.spatialIndex.get(id) ?? this.boundsForPlacement(p);
   }
 
   private unionBounds(bounds: WorldBounds[]): WorldBounds | null {
@@ -648,9 +787,12 @@ export class CanvasScene {
     return this.boundsFromEdges(minX, minY, maxX, maxY);
   }
 
-  private snapTargets(exclude: Set<string>): WorldBounds[] {
+  private snapTargets(exclude: Set<string>, around: WorldBounds): WorldBounds[] {
     const targets: WorldBounds[] = [];
-    for (const id of this.nodes.keys()) {
+    const pad = SNAP_TARGET_PAD_PX / this.cam.scale;
+    const ids = this.spatialIndex.queryRect(expandBounds(around, pad));
+    this.lastSnapCandidates = ids.length;
+    for (const id of ids) {
       if (exclude.has(id)) continue;
       const b = this.currentPlacementBounds(id);
       if (b) targets.push(b);
@@ -714,9 +856,10 @@ export class CanvasScene {
 
   private snapDrag(dx: number, dy: number): { dx: number; dy: number; guides: SnapGuide[] } {
     const exclude = new Set(this.dragOrigin.keys());
-    const targets = this.snapTargets(exclude);
     const moving = this.dragBounds(dx, dy);
-    if (!moving || targets.length === 0) return { dx, dy, guides: [] };
+    if (!moving) return { dx, dy, guides: [] };
+    const targets = this.snapTargets(exclude, moving);
+    if (targets.length === 0) return { dx, dy, guides: [] };
 
     const matchX = this.bestSnap(moving, targets, "x");
     const matchY = this.bestSnap(moving, targets, "y");
@@ -762,7 +905,7 @@ export class CanvasScene {
   private snapResize(scale: number): { scale: number; guides: SnapGuide[] } {
     const moving = this.resizeBounds(scale);
     if (!moving) return { scale, guides: [] };
-    const targets = this.snapTargets(new Set([this.xform.id]));
+    const targets = this.snapTargets(new Set([this.xform.id]), moving);
     if (targets.length === 0) return { scale, guides: [] };
 
     const candidates = [...this.snapMatches(moving, targets, "x"), ...this.snapMatches(moving, targets, "y")].sort(
@@ -825,21 +968,20 @@ export class CanvasScene {
 
   /** Frame all placements (⇧1). */
   fitAll(): void {
-    const b = this.boundsOf([...this.nodes.keys()]);
+    const b = this.spatialIndex.allBounds();
     if (b) this.fitBounds(b);
   }
 
   /** Frame the current selection, or all if nothing selected (⇧2). */
   fitSelection(): void {
-    const ids = this.selected.size ? [...this.selected] : [...this.nodes.keys()];
-    const b = this.boundsOf(ids);
+    const b = this.selected.size ? this.boundsOf([...this.selected]) : this.spatialIndex.allBounds();
     if (b) this.fitBounds(b);
   }
 
   /** Reset to 100%, centered on the content (⌘0). */
   resetZoom(): void {
     const s = this.safeRect();
-    const b = this.boundsOf([...this.nodes.keys()]);
+    const b = this.spatialIndex.allBounds();
     const cx = b ? (b.minX + b.maxX) / 2 : 0;
     const cy = b ? (b.minY + b.maxY) / 2 : 0;
     this.cam.scale = 1;
@@ -857,10 +999,10 @@ export class CanvasScene {
   private drawMinimap(): void {
     const g = this.minimapGfx;
     g.clear();
-    if (!this.minimapVisible || this.nodes.size === 0) return;
+    if (!this.minimapVisible || this.placements.size === 0) return;
     const vw = this.hostEl?.clientWidth || this.app.screen.width;
     const vh = this.hostEl?.clientHeight || this.app.screen.height;
-    const b = this.boundsOf([...this.nodes.keys()]);
+    const b = this.spatialIndex.allBounds();
     if (!b) return;
     // Always include the viewport so the box reflects where you are.
     const tl = this.screenToWorld(0, 0);
@@ -881,11 +1023,10 @@ export class CanvasScene {
     const oy = my + (mH - wH * s) / 2;
     const toMini = (wx: number, wy: number): [number, number] => [ox + (wx - minX) * s, oy + (wy - minY) * s];
     g.roundRect(mx, my, mW, mH, 8).fill({ color: 0xffffff, alpha: 0.92 }).stroke({ width: 1, color: 0xe5e7eb });
-    for (const [id, node] of this.nodes) {
-      const p = this.placements.get(id);
-      if (!p) continue;
-      const [rx, ry] = toMini(p.x - (node.w * p.scale) / 2, p.y - (node.h * p.scale) / 2);
-      g.rect(rx, ry, Math.max(1, node.w * p.scale * s), Math.max(1, node.h * p.scale * s)).fill({
+    for (const [id, p] of this.placements) {
+      const { w, h } = this.placementSize(p);
+      const [rx, ry] = toMini(p.x - (w * p.scale) / 2, p.y - (h * p.scale) / 2);
+      g.rect(rx, ry, Math.max(1, w * p.scale * s), Math.max(1, h * p.scale * s)).fill({
         color: this.selected.has(id) ? ACCENT : 0xc8c8ce,
         alpha: 0.95,
       });
@@ -1204,6 +1345,7 @@ export class CanvasScene {
    *  handles on the cropped image so only the crop frame is adjustable. */
   setCropActive(active: boolean): void {
     this.cropActive = active;
+    this.syncActiveNodes();
     this.refreshOutlines();
     this.refreshCursor();
   }
@@ -1825,6 +1967,7 @@ export class CanvasScene {
     const wasSpacePan = this.spacePan;
     this.spacePan = false;
     if (this.mode === "pan" && this.spacePanDrag) {
+      this.pointerMoveScheduler.flush();
       this.mode = "idle";
       this.spacePanDrag = false;
       this.moved = false;
@@ -1872,20 +2015,23 @@ export class CanvasScene {
   private hitNodeAtWorld(worldX: number, worldY: number): string | null {
     let hitId: string | null = null;
     let hitZ = -Infinity;
-    for (const [id, node] of this.nodes) {
+    const candidates = this.spatialIndex.queryPoint(worldX, worldY);
+    this.lastHitCandidates = candidates.length;
+    for (const id of candidates) {
       const p = this.placements.get(id);
       if (!p) continue;
-      const cx = node.container.position.x;
-      const cy = node.container.position.y;
-      const sc = node.container.scale.x;
-      const rot = node.container.rotation;
+      const { w, h } = this.placementSize(p);
+      const cx = p.x;
+      const cy = p.y;
+      const sc = p.scale;
+      const rot = p.rotation;
       const dx = worldX - cx;
       const dy = worldY - cy;
       const cos = Math.cos(-rot);
       const sin = Math.sin(-rot);
       const localX = (dx * cos - dy * sin) / sc;
       const localY = (dx * sin + dy * cos) / sc;
-      if (Math.abs(localX) <= node.w / 2 && Math.abs(localY) <= node.h / 2 && p.z >= hitZ) {
+      if (Math.abs(localX) <= w / 2 && Math.abs(localY) <= h / 2 && p.z >= hitZ) {
         hitZ = p.z;
         hitId = id;
       }
@@ -1997,8 +2143,12 @@ export class CanvasScene {
 
   private onPointerMove(e: FederatedPointerEvent): void {
     if (this.mode === "idle") return;
-    const gx = e.global.x;
-    const gy = e.global.y;
+    this.pointerMoveScheduler.schedule({ x: e.global.x, y: e.global.y });
+  }
+
+  private handlePointerMove({ x: gx, y: gy }: PointerMoveFrame): void {
+    if (this.mode === "idle") return;
+    const global = { x: gx, y: gy };
 
     if (this.mode === "pan") {
       if (!this.moved) {
@@ -2062,7 +2212,7 @@ export class CanvasScene {
     } else if (this.mode === "annotate") {
       const node = this.annoNodeId ? this.nodes.get(this.annoNodeId) : null;
       if (node && this.annoTemp) {
-        const local = node.container.toLocal(e.global);
+        const local = node.container.toLocal(global);
         this.annoEndLocal = { x: local.x, y: local.y };
         if (this.annoShape === "path") this.annoPath.push([local.x, local.y]);
         const sw = Math.max(4, Math.max(node.w, node.h) * 0.006);
@@ -2075,7 +2225,7 @@ export class CanvasScene {
       if (node) {
         if (Math.abs(gx - md.startGlobal.x) + Math.abs(gy - md.startGlobal.y) > 3) md.moved = true;
         if (md.moved) {
-          const local = node.container.toLocal(e.global);
+          const local = node.container.toLocal(global);
           const dx = local.x - md.startLocal.x;
           const dy = local.y - md.startLocal.y;
           md.currentPoints = md.startPoints.map(([px, py]) => [px + dx, py + dy] as [number, number]);
@@ -2091,7 +2241,7 @@ export class CanvasScene {
           if (this.pointerDistanceFrom(this.dragStart, gx, gy) < MARQUEE_START_THRESHOLD_PX) return;
           this.moved = true;
         }
-        const local = node.container.toLocal(e.global);
+        const local = node.container.toLocal(global);
         this.annoEndLocal = { x: local.x, y: local.y };
         this.drawCropRect(node, this.annoTemp);
       }
@@ -2099,6 +2249,7 @@ export class CanvasScene {
   }
 
   private onPointerUp(): void {
+    this.pointerMoveScheduler.flush();
     if (this.mode === "drag" && this.moved) {
       const updates: PlacementUpdate[] = [];
       for (const sid of this.dragOrigin.keys()) {
@@ -2208,7 +2359,10 @@ export class CanvasScene {
     const minY = Math.min(a.y, b.y);
     const maxY = Math.max(a.y, b.y);
     const picked = new Set<string>();
-    for (const id of this.nodes.keys()) {
+    const marqueeBounds = this.boundsFromEdges(minX, minY, maxX, maxY);
+    const candidates = this.spatialIndex.queryRect(marqueeBounds);
+    this.lastMarqueeCandidates = candidates.length;
+    for (const id of candidates) {
       const bounds = this.currentPlacementBounds(id);
       if (!bounds) continue;
       const intersects =
@@ -2236,7 +2390,7 @@ export class CanvasScene {
     const rect = this.canvasEl.getBoundingClientRect();
     const sx = (ge.clientX ?? rect.left + rect.width / 2) - rect.left;
     const sy = (ge.clientY ?? rect.top + rect.height / 2) - rect.top;
-    this.zoomAt(sx, sy, factor);
+    this.wheelScheduler.schedule({ kind: "zoom", sx, sy, factor });
   };
 
   private onGestureEnd = (e: Event): void => {
@@ -2253,13 +2407,21 @@ export class CanvasScene {
       const rect = this.canvasEl?.getBoundingClientRect();
       const sx = rect ? e.clientX - rect.left : e.offsetX;
       const sy = rect ? e.clientY - rect.top : e.offsetY;
-      this.zoomAt(sx, sy, factor);
+      this.wheelScheduler.schedule({ kind: "zoom", sx, sy, factor });
     } else {
-      this.cam.x -= e.deltaX;
-      this.cam.y -= e.deltaY;
-      this.applyCamera();
+      this.wheelScheduler.schedule({ kind: "pan", dx: -e.deltaX, dy: -e.deltaY });
     }
   };
+
+  private applyWheelInput(input: WheelInput): void {
+    if (input.kind === "zoom") {
+      this.zoomAt(input.sx, input.sy, input.factor);
+    } else {
+      this.cam.x += input.dx;
+      this.cam.y += input.dy;
+      this.applyCamera();
+    }
+  }
 
   private zoomAt(sx: number, sy: number, factor: number): void {
     const newScale = clamp(this.cam.scale * factor, MIN_SCALE, MAX_SCALE);
@@ -2282,6 +2444,7 @@ export class CanvasScene {
   private applyCamera(): void {
     this.world.position.set(this.cam.x, this.cam.y);
     this.world.scale.set(this.cam.scale);
+    this.syncActiveNodes();
   }
 
   private rendererLabel(): string {
@@ -2303,6 +2466,8 @@ export class CanvasScene {
 
   destroy(): void {
     this.destroyed = true;
+    this.pointerMoveScheduler.cancel();
+    this.wheelScheduler.cancel();
     this.resizeObs?.disconnect();
     this.resizeObs = null;
     this.titleEl?.remove();

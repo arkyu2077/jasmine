@@ -184,6 +184,7 @@ function Hud() {
   const canUndo = useHistoryStore((s) => s.undoStack.length > 0);
   const canRedo = useHistoryStore((s) => s.redoStack.length > 0);
   const t = useT();
+  const showDevStats = import.meta.env.DEV;
   return (
     <div className="cm-hud">
       <button
@@ -239,6 +240,13 @@ function Hud() {
           <Plus size={13} />
         </button>
       </span>
+      {showDevStats && (
+        <span className="cm-hud__dev">
+          {stats.activePlacements}/{stats.placements} active · {stats.indexCells} cells · {stats.frameMs}ms ·{" "}
+          {stats.renderer} · {stats.inputCoalesced} coalesced · S/H/M {stats.snapCandidates}/{stats.hitCandidates}/
+          {stats.marqueeCandidates}
+        </span>
+      )}
     </div>
   );
 }

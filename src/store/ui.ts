@@ -50,7 +50,22 @@ interface UiState {
 /** Chrome-side UI state (HUD readouts, active tool). Kept separate from the
  *  Pixi scene graph so React re-renders never touch the canvas. */
 export const useUiStore = create<UiState>((set) => ({
-  stats: { fps: 0, zoom: 1, renderer: "?" },
+  stats: {
+    fps: 0,
+    zoom: 1,
+    renderer: "?",
+    placements: 0,
+    activePlacements: 0,
+    visiblePlacements: 0,
+    culledPlacements: 0,
+    indexCells: 0,
+    frameMs: 0,
+    inputCoalesced: 0,
+    inputMaxDelayMs: 0,
+    snapCandidates: 0,
+    marqueeCandidates: 0,
+    hitCandidates: 0,
+  },
   setStats: (stats) => set({ stats }),
   tool: "select",
   setTool: (tool) => set({ tool }),
