@@ -102,11 +102,11 @@ if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
 else
   ok "tag $TAG already exists"
 fi
-if ! gh release view "$TAG" >/dev/null 2>&1; then
-  gh release create "$TAG" --title "Jasmine $TAG" --notes "$NOTES" --verify-tag && ok "created GitHub release $TAG"
+if ! gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+  gh release create "$TAG" --repo "$GH_REPO" --title "Jasmine $TAG" --notes "$NOTES" --verify-tag && ok "created GitHub release $TAG"
 fi
 info "uploading ${#GH_FILES[@]} installer(s) — this may take a while"
-gh release upload "$TAG" "${GH_FILES[@]}" --clobber \
+gh release upload "$TAG" "${GH_FILES[@]}" --repo "$GH_REPO" --clobber \
   && ok "uploaded ${#GH_FILES[@]} installer(s) → GitHub Release"
 echo ""
 
