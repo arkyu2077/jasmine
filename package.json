@@ -1,7 +1,7 @@
 {
   "name": "jasmine",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "An image-first canvas for your local Codex agent.",
   "license": "AGPL-3.0-or-later",
   "author": "arkyu <arkyu.008@gmail.com>",

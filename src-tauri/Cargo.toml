@@ -1,6 +1,6 @@
 [package]
 name = "jasmine"
-version = "0.0.1"
+version = "0.0.2"
 description = "An image-first canvas for your local Codex agent."
 authors = ["arkyu <arkyu.008@gmail.com>"]
 license = "AGPL-3.0-or-later"
